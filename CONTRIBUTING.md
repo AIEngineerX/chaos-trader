@@ -60,7 +60,7 @@ A release is cut by pushing a `vX.Y.Z` tag: `.github/workflows/publish.yml` buil
 
 ## Rollback
 
-A bad release is yanked on PyPI (project page, Manage, Releases, Yank), which hides it from `pip install chaos-trader` without breaking pinned installs. Fix forward with a new patch version and tag; never re-upload a version number, because PyPI refuses it. A bad commit on `main` is reverted with `git revert`, not a force-push. Repository history from before the 0.1.0 squash is kept in private git bundles outside the repository.
+Once the package is on PyPI, a bad release is yanked there (project page, Manage, Releases, Yank), which hides it from `pip install chaos-trader` without breaking pinned installs. Fix forward with a new patch version and tag; never re-upload a version number, because PyPI refuses it. A bad commit on `main` is reverted with `git revert`, not a force-push. Repository history from before the 0.1.0 squash is kept in private git bundles outside the repository.
 
 ## Reporting a security problem
 
