@@ -13,6 +13,7 @@ from chaos_trader.onboard import ALREADY_SET_UP, ROSTER, onboard
 
 DEFAULT_RPC_URL = "https://api.mainnet-beta.solana.com"
 NEEDS_TERMINAL = "chaos onboard needs a terminal for its two questions; pass --yes to use the defaults."
+PUBLIC_RPC_NUDGE = "The public RPC does not serve the largest-holder read at all; a Helius or other provider key is needed to check the largest holders for watch wallets."
 PACKAGE = Path(__file__).resolve().parent
 SCRIPTS = PACKAGE / "trading" / "scripts"
 JOBS = PACKAGE / "jobs"
@@ -88,6 +89,8 @@ def _onboard(argv: list[str]) -> int:
     except EOFError:
         print(NEEDS_TERMINAL, file=sys.stderr)
         return 2
+    if rpc == DEFAULT_RPC_URL and not key:
+        print(PUBLIC_RPC_NUDGE)
     env_report: list[str] = []
     done = onboard(home, rpc_url=rpc, helius_key=key or None, env_report=env_report, rpc_is_default=rpc == DEFAULT_RPC_URL and not a.rpc_url)
     for line in env_report:

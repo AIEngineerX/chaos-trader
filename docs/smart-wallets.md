@@ -135,7 +135,8 @@ Wallets that pass are weighted by tier: A=3, B=2, C=1. The shipped `paper_autopi
 The limits in this release:
 
 - The read matches watch wallets only against the token's sampled holders, which are up to its 20 largest accounts plus a 10-row token-account sample, and pump.fun's top signers. A roster wallet shows as a hit only when it is among them.
-- On a rate-limited RPC the holder sample can be unavailable. The card then says `HOLDERS: unavailable (rate limited)`, and the largest holders are not checked.
+- The public RPC does not serve the 20-largest-accounts read at all, so there the card says `HOLDERS: unavailable (not served by this RPC)`, only the 10-row token-account sample is matched, and watch wallets among the largest holders need a keyed RPC.
+- On a keyed RPC with a short rate limit the holder read retries three times, after 1, 2, and 4 seconds, and then uses a sample cached in the last 15 minutes, which the card shows as `HOLDERS: cached <N>m`; with no such sample the card says `HOLDERS: unavailable (rate limited)` and the largest holders are not checked.
 - The gate's timing confirmation requires a first-touch time. It is needed for `micro-watch`, and for `watch` and `deep-check` in conviction trench mode. The token read runs the gate before its timing enrichment, and the enrichment never sets a first-touch time. A token read on its own therefore never confirms timing, even with a quality hit. The autopilot step above is the only path that supplies one.
 - A roster hit's timing status in the analysis file is `unknown`, because the read has no first-touch data for it. A roster wallet seen as a repeat signer among pump.fun's top signers shows `scaler` instead.
 - The `chaos paper` verb that read this table was retired in this release.

@@ -2,9 +2,11 @@ import io
 import json
 import os
 import sys
+import tempfile
 import unittest
 import urllib.error
 from contextlib import redirect_stdout
+from pathlib import Path
 from unittest import mock
 
 import chaos_cmd
@@ -23,6 +25,8 @@ class HolderRateLimitTests(unittest.TestCase):
 
     def setUp(self):
         self.calls = 0
+        cache = tempfile.TemporaryDirectory()
+        self.addCleanup(cache.cleanup)
 
         def rate_limited(req, timeout=None):
             self.calls += 1
@@ -36,11 +40,15 @@ class HolderRateLimitTests(unittest.TestCase):
             mock.patch.object(helius_common.time, "sleep"),
             # The public RPC host is checked by DNS; answer that check here so the tests run with DNS down.
             mock.patch.object(helius_common, "_host_is_private_or_reserved", return_value=False),
+            # The holder read's own 429 waits, and an empty cache folder so no earlier sample answers.
+            mock.patch.object(holder_resolver, "_sleep"),
+            mock.patch.object(holder_resolver, "HOLDER_CACHE", Path(cache.name)),
         ]
         started = [p.start() for p in patches]
         for p in patches:
             self.addCleanup(p.stop)
         self.sleep = started[2]
+        self.holder_sleep = started[4]
 
     def test_retry_backoff_is_two_four_eight_seconds_then_a_clean_exit(self):
         with self.assertRaises(SystemExit) as ctx:
@@ -51,6 +59,7 @@ class HolderRateLimitTests(unittest.TestCase):
 
     def test_holder_read_degrades_to_an_empty_set_with_a_marker(self):
         result = holder_resolver.resolve_holders(MINT, 20)
+        self.assertEqual([c.args[0] for c in self.holder_sleep.call_args_list], [1, 2, 4])
         self.assertTrue(result["ok"])
         self.assertEqual(result["holders"], [])
         self.assertEqual(result["holder_data"], MARKER)

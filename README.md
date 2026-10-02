@@ -112,13 +112,13 @@ Five commands read data they do not fill themselves. On a fresh home, four of th
 
 ## Configuration
 
-Everything lives in one folder, `CHAOS_HOME`. Nothing is written anywhere else, except by `chaos skills install`, which writes into the harness skill directories it prints.
+Everything lives in one folder, `CHAOS_HOME`. Nothing is written anywhere else, except by `chaos skills install`, which writes into the harness skill directories it prints. `CHAOS_HOME/trading/cache/holders/` keeps the last largest-holder sample for each mint read on a keyed RPC and is safe to delete; the public RPC never fills it, because it does not serve that read.
 
 Which commands work on which RPC:
 
 | Command | Works on any RPC | Needs Helius |
 |---|---|---|
-| `chaos token` | Yes. Watch-wallet hits need the holder sample, which a rate-limited RPC can leave unavailable; the holder sample is the 20 largest accounts plus a small sample. A token read on its own never confirms wallet timing; only the paper autopilot supplies a first touch | Only for the mint's transaction history: first-touch timing and launch activity come back unavailable without it |
+| `chaos token` | Yes. Watch-wallet hits need the holder sample, which is the 20 largest accounts plus a small sample. The public RPC does not serve the 20 largest accounts at all (`HOLDERS: unavailable (not served by this RPC)`), so only the small sample is matched there, and watch wallets among the largest holders need a keyed RPC. On a keyed RPC with a short rate limit, holder reads retry three times and then use a sample cached in the last 15 minutes, if any. A token read on its own never confirms wallet timing; only the paper autopilot supplies a first touch | Only for the mint's transaction history: first-touch timing and launch activity come back unavailable without it |
 | `chaos analyze token` | Yes | Same as `chaos token` |
 | `chaos sweep` | Yes | Same as `chaos token` |
 | `chaos strategy-paper` | Yes: it runs the token analysis itself, so it needs no earlier output | Same as `chaos token` |

@@ -267,7 +267,8 @@ def score_mint(con: sqlite3.Connection, mint: str, *, enrich_wallets: bool = Fal
         negatives.append("no_token_signal_row")
 
     concentration_source = "none"
-    if holder_resolution and not holder_resolution.get("holder_data"):
+    # A cached holder sample (`cached <N>m`) is used like a live one; only an unread one falls through.
+    if holder_resolution and not str(holder_resolution.get("holder_data") or "").startswith("unavailable"):
         concentration_source = "holder_resolver_adjusted"
         sp = holder_resolution.get("adjusted_discretionary_pct")
         unknown_pct = holder_resolution.get("unknown_pct") or 0

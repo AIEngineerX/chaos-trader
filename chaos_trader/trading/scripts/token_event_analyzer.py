@@ -102,17 +102,20 @@ def run_json(cmd: list[str], timeout: int = 75) -> tuple[dict[str, Any] | None, 
 
 
 def holder_data_of(result: dict[str, Any]) -> str | None:
-    """The marker the holder read leaves when it could not read holders (for example a rate-limited RPC)."""
+    """The marker a holder read leaves when it is not live: `cached <N>m`, or `unavailable (...)` when holders were not read."""
     hr = (result.get("token_scan") or {}).get("holder_resolution")
     return hr.get("holder_data") if isinstance(hr, dict) else None
 
 
 def mark_holder_data(result: dict[str, Any]) -> None:
-    """On the degraded path only, put the marker and `holder_data_unavailable: true` in the result JSON."""
+    """Put the marker in the result JSON; `holder_data_unavailable: true` only when holders were not read.
+
+    A cached sample is a real sample and scores like a live one; its marker is shown as a caveat."""
     marker = holder_data_of(result)
     if marker:
         result["holder_data"] = marker
-        result["holder_data_unavailable"] = True
+        if marker.startswith("unavailable"):
+            result["holder_data_unavailable"] = True
 
 
 def dex_summary(mint: str) -> tuple[dict[str, Any], str | None]:

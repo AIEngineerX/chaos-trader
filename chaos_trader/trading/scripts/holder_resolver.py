@@ -9,13 +9,22 @@ import os
 
 import argparse
 import json
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from helius_common import load_env, require_address, rpc_request, safe_print
+from helius_common import load_env, method_not_served, require_address, rpc_request, safe_print
 
 from chaos_home import chaos_home  # noqa: E402
 PROFILE_HOME = chaos_home()
+# The last good sample per mint, used when a rate limit outlasts the retries. Safe to delete.
+HOLDER_CACHE = PROFILE_HOME / "trading" / "cache" / "holders"
+CACHE_MAX_AGE_S = 15 * 60
+RATE_LIMIT_WAITS = (1, 2, 4)
+# Failures rpc_request retries by itself; a first failure of this kind goes back through its own loop.
+TRANSIENT_STATUSES = {500, 502, 503, 504}
+_sleep = time.sleep  # a clock: tests replace it
 
 KNOWN_PROGRAMS = {
     "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P": ("pump.fun", "program"),
@@ -71,18 +80,75 @@ def classify_owner(owner: str | None, owner_info: dict[str, Any] | None) -> dict
     return {"holder_class": "unknown", "confidence": "medium", "reason": f"owner_account_owned_by_unclassified_program_{program}", "owner_program": program}
 
 
+def _failure_details(failure: SystemExit) -> dict[str, Any]:
+    """The JSON body rpc_request raises with, or {} when the exit message is plain text."""
+    try:
+        details = json.loads(str(failure))
+    except ValueError:
+        return {}
+    return details if isinstance(details, dict) else {}
+
+
+def _not_served(failure: SystemExit) -> bool:
+    """rpc_request's failure was a 429 saying this RPC never serves the method."""
+    return method_not_served(_failure_details(failure).get("http_status"), getattr(failure, "headers", None))
+
+
+def largest_accounts(mint: str) -> dict[str, Any]:
+    """getTokenLargestAccounts, retried after 1, 2 and 4 seconds while the RPC answers 429.
+
+    A 429 that says the method is not served at all stops at once. Any other transient failure (5xx,
+    network) goes through rpc_request's own retry loop, as before."""
+    for wait in (*RATE_LIMIT_WAITS, None):
+        try:
+            return rpc_request("getTokenLargestAccounts", [mint], timeout=30, retries=0) or {}
+        except SystemExit as exc:
+            details = _failure_details(exc)
+            if details.get("http_status") in TRANSIENT_STATUSES or "network_error" in details:
+                return rpc_request("getTokenLargestAccounts", [mint], timeout=30) or {}
+            if details.get("http_status") != 429 or wait is None or _not_served(exc):
+                raise
+        _sleep(wait)
+
+
+def _cache_file(mint: str) -> Path:
+    return HOLDER_CACHE / f"{mint}.json"
+
+
+def write_cached_holders(result: dict[str, Any]) -> None:
+    """Keep the sample with its UTC read time. Written to a temp file first, so a reader never sees half a file."""
+    path = _cache_file(result["mint"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps({**result, "fetched_at": datetime.now(timezone.utc).isoformat()}), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def cached_holders(mint: str) -> dict[str, Any] | None:
+    """The cached sample marked `cached <N>m` when it is younger than 15 minutes; otherwise None."""
+    path = _cache_file(mint)
+    if not path.exists():
+        return None
+    sample = json.loads(path.read_text(encoding="utf-8"))
+    age_s = (datetime.now(timezone.utc) - datetime.fromisoformat(sample.pop("fetched_at"))).total_seconds()
+    if age_s >= CACHE_MAX_AGE_S:
+        return None
+    return {**sample, "holder_data": f"cached {int(age_s // 60)}m"}
+
+
 def unavailable_holders(mint: str, limit: int, failure: SystemExit) -> dict[str, Any]:
     """An empty holder set that says why it is empty, so a rate-limited RPC does not kill the token read."""
-    try:
-        status = json.loads(str(failure)).get("http_status")
-    except ValueError:
-        status = None
+    status = _failure_details(failure).get("http_status")
+    if status == 429:
+        reason = "not served by this RPC" if _not_served(failure) else "rate limited"
+    else:
+        reason = "rpc error"
     return {
         "ok": True,
         "mode": "holder_resolver",
         "mint": mint,
         "limit": limit,
-        "holder_data": "unavailable (rate limited)" if status == 429 else "unavailable (rpc error)",
+        "holder_data": f"unavailable ({reason})",
         "supply": None,
         "raw_top_pct": None,
         "lp_pool_pct": None,
@@ -99,10 +165,10 @@ def unavailable_holders(mint: str, limit: int, failure: SystemExit) -> dict[str,
 def resolve_holders(mint: str, limit: int) -> dict[str, Any]:
     mint = require_address(mint, "mint")
     try:
-        largest = rpc_request("getTokenLargestAccounts", [mint], timeout=30) or {}
+        largest = largest_accounts(mint)
         supply_res = rpc_request("getTokenSupply", [mint], timeout=30) or {}
     except SystemExit as exc:
-        return unavailable_holders(mint, limit, exc)
+        return cached_holders(mint) or unavailable_holders(mint, limit, exc)
     supply = float(((supply_res.get("value") or {}).get("uiAmount")) or 0)
     accounts = (largest.get("value") or [])[:limit]
     token_account_addrs = [a.get("address") for a in accounts if a.get("address")]
@@ -138,7 +204,7 @@ def resolve_holders(mint: str, limit: int) -> dict[str, Any]:
     unknown_pct = sum((r.get("pct_supply") or 0) for r in rows if r.get("holder_class") == "unknown")
     largest_discretionary = max(discretionary, key=lambda r: r.get("pct_supply") or 0, default=None)
 
-    return {
+    result = {
         "ok": True,
         "mode": "holder_resolver",
         "mint": mint,
@@ -159,14 +225,17 @@ def resolve_holders(mint: str, limit: int) -> dict[str, Any]:
             "Read-only: no signing/sending/swapping.",
         ],
     }
+    write_cached_holders(result)
+    return result
 
 
 def render_md(r: dict[str, Any]) -> str:
-    if r.get("holder_data"):
+    if str(r.get("holder_data") or "").startswith("unavailable"):
         return "\n".join(["## Holder Resolution", f"- Mint: `{r['mint']}`", f"- Holder data: {r['holder_data']}"]) + "\n"
     lines = [
         "## Holder Resolution",
         f"- Mint: `{r['mint']}`",
+        *([f"- Holder data: {r['holder_data']}"] if r.get("holder_data") else []),
         f"- Raw top {r['limit']}: {r['raw_top_pct']}%",
         f"- LP / pool excluded: {r['lp_pool_pct']}%",
         f"- Program / burn excluded: {r['program_or_burn_pct']}%",

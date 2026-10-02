@@ -9,6 +9,8 @@ from pathlib import Path
 
 from chaos_trader.cli import NEEDS_TERMINAL, main
 
+NUDGE = "The public RPC does not serve the largest-holder read at all; a Helius or other provider key is needed to check the largest holders for watch wallets."
+
 
 class CliTests(unittest.TestCase):
     def run_cli(self, *args, home: Path, extra_env: dict | None = None):
@@ -111,6 +113,33 @@ class CliTests(unittest.TestCase):
             self.assertIn("SOLANA_RPC_URL=https://api.mainnet-beta.solana.com", env_text)
             if os.name != "nt":
                 self.assertEqual((home / ".env").stat().st_mode & 0o777, 0o600)
+
+    def test_onboard_nudges_toward_a_key_only_on_the_public_rpc(self):
+        cases = (((), True), (("--rpc-url", "https://example.invalid/"), False), (("--helius-key", "K"), False))
+        for args, nudged in cases:
+            with self.subTest(args=args), tempfile.TemporaryDirectory() as tmp:
+                p = self.run_cli("onboard", "--yes", *args, home=Path(tmp) / "h")
+                self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+                self.assertEqual(NUDGE in p.stdout.splitlines(), nudged, p.stdout)
+
+    def test_token_on_the_public_rpc_exits_0_with_a_live_cached_or_unavailable_holder_read(self):
+        # Real network. A live read prints no HOLDERS line; a cached or unavailable one prints exactly one.
+        with tempfile.TemporaryDirectory() as tmp:
+            home, user = Path(tmp) / "h", Path(tmp) / "user"
+            user.mkdir()
+            drop = ("HELIUS_API_KEY", "SOLANA_RPC_URL", "CHAOS_PROFILE_HOME", "HERMES_HOME", "XAI_API_KEY", "X_SEARCH_PROVIDER", "HERMES_AGENT_SRC")
+            env = {k: v for k, v in os.environ.items() if k not in drop}
+            env.update(CHAOS_HOME=str(home), PYTHONIOENCODING="utf-8", HOME=str(user), USERPROFILE=str(user))
+            cli = [sys.executable, "-m", "chaos_trader.cli"]
+            p = subprocess.run([*cli, "onboard", "--yes"], capture_output=True, text=True, encoding="utf-8", env=env)
+            self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+            p = subprocess.run([*cli, "token", "So11111111111111111111111111111111111111112", "--no-x"],
+                               capture_output=True, text=True, encoding="utf-8", env=env, timeout=480)
+            self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+            holders = [line for line in p.stdout.splitlines() if line.startswith("HOLDERS:")]
+            self.assertLessEqual(len(holders), 1, p.stdout)
+            for line in holders:
+                self.assertRegex(line, r"^HOLDERS: (cached \d+m|unavailable \((rate limited|not served by this RPC|rpc error)\))$")
 
     def test_onboard_home_flag_is_named_as_the_source(self):
         with tempfile.TemporaryDirectory() as tmp:

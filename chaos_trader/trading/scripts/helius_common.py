@@ -149,6 +149,13 @@ def wallet_api_key() -> str:
     return key
 
 
+def method_not_served(status: int | None, headers: Any) -> bool:
+    """A 429 whose method limit is 0: the RPC never serves this method, so a retry cannot help.
+
+    The public mainnet RPC answers getTokenLargestAccounts this way."""
+    return status == 429 and headers is not None and (headers.get("x-ratelimit-method-limit") or "").strip() == "0"
+
+
 def rpc_request(method: str, params: list[Any] | dict[str, Any] | None = None, *, timeout: int = 30, retries: int = 3) -> Any:
     if method not in ALLOWED_RPC_METHODS:
         raise SystemExit(json.dumps({"ok": False, "method": method, "error": "RPC method is not read-only allowlisted"}, indent=2))
@@ -165,12 +172,18 @@ def rpc_request(method: str, params: list[Any] | dict[str, Any] | None = None, *
             return payload.get("result")
         except urllib.error.HTTPError as exc:
             last_error = exc
-            if exc.code not in {429, 500, 502, 503, 504} or attempt >= retries:
-                try:
-                    details = exc.read().decode("utf-8")[:1000]
-                except Exception:
-                    details = str(exc)
-                raise SystemExit(json.dumps({"ok": False, "method": method, "http_status": exc.code, "error": details}, indent=2))
+            # The error carries the open response; close it on both paths so no socket is left to the collector.
+            try:
+                if exc.code not in {429, 500, 502, 503, 504} or attempt >= retries or method_not_served(exc.code, exc.headers):
+                    try:
+                        details = exc.read().decode("utf-8")[:1000]
+                    except Exception:
+                        details = str(exc)
+                    failure = SystemExit(json.dumps({"ok": False, "method": method, "http_status": exc.code, "error": details}, indent=2))
+                    failure.headers = exc.headers  # so a caller can read rate-limit headers such as x-ratelimit-method-limit
+                    raise failure
+            finally:
+                exc.close()
         except urllib.error.URLError as exc:
             last_error = exc
             if attempt >= retries:
