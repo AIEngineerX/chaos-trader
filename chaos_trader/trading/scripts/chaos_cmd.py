@@ -26,6 +26,8 @@ from alpha_tape import sweep_payload as alpha_sweep_payload
 from alpha_tape import token_payload as alpha_token_payload
 from strategy_paper_engine import decide as decide_strategy_paper
 from strategy_paper_engine import render as render_strategy_paper
+from json_contract import print_envelope
+from json_contract import status as json_status
 import x_provider
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -37,6 +39,8 @@ BOUNDARY = "Advisory + paper only. No wallet, signing, routing, or live executio
 NOTHING_YET_SWEEP_FAST = "The roster tape is empty until the ingest job has run. Run the ingest job, or use chaos sweep without --fast for the trending sweep."
 PAPER_RETIRED = "chaos paper was retired; use chaos paper-report for the paper book and chaos strategy-paper <mint> for one mint."
 NO_INGEST_REVIEW = "No ingest yet. Run chaos run chaos_alpha_elite_ingest first."
+JSON_HELP = "Print one JSON envelope: schema_version, command, generated_at, data"
+JSON_EXCLUSIVE = "--json cannot be combined with --raw or --render-json; pick one."
 NOTHING_YET_WALLETS = 'Wallet discovery needs transfer edges from the Helius wallet API. With a Helius RPC and HELIUS_API_KEY set, run: chaos run smart_wallet_tracker <wallet address> — then try again.'
 
 
@@ -463,6 +467,9 @@ def cmd_token(args: argparse.Namespace) -> None:
         raise SystemExit("Invalid Solana mint/CA shape.")
     if getattr(args, "fast", False):
         payload = alpha_token_payload(mint, dex=getattr(args, "with_dex", False), dex_ttl=getattr(args, "dex_ttl", 60))
+        if getattr(args, "json", False):
+            print_envelope("token", payload)
+            return
         if args.render_json:
             text = render_alpha_token(payload)
             print(json.dumps({
@@ -481,7 +488,9 @@ def cmd_token(args: argparse.Namespace) -> None:
     if getattr(args, "gmgn", False):
         script_args.append("--gmgn")
     payload = run_raw(script_args, timeout=args.timeout)
-    if args.render_json:
+    if getattr(args, "json", False):
+        print_envelope("token", payload)
+    elif args.render_json:
         print(json.dumps(token_render_descriptor(payload, include_artifact=args.artifact, mode_label="TOKEN READ"), ensure_ascii=False))
     else:
         print(compact_token(payload, include_artifact=args.artifact, mode_label="TOKEN READ"))
@@ -497,7 +506,9 @@ def cmd_analyze(args: argparse.Namespace) -> None:
     if getattr(args, "gmgn", False):
         script_args.append("--gmgn")
     payload = run_raw(script_args, timeout=args.timeout)
-    if args.render_json:
+    if getattr(args, "json", False):
+        print_envelope("analyze", payload)
+    elif args.render_json:
         print(json.dumps(token_render_descriptor(payload, include_artifact=True, mode_label="DEEP TOKEN ANALYSIS"), ensure_ascii=False))
     else:
         print(compact_token(payload, include_artifact=True, mode_label="DEEP TOKEN ANALYSIS"))
@@ -507,7 +518,13 @@ def cmd_sweep(args: argparse.Namespace) -> None:
     if getattr(args, "fast", False):
         payload = alpha_sweep_payload(limit=args.limit)
         if not payload.get("ok", True) and all(str(e).startswith(("missing table", "smart_wallets.sqlite missing")) for e in payload.get("errors") or []):
+            if getattr(args, "json", False):
+                print_envelope("sweep", json_status("no-ingest", NOTHING_YET_SWEEP_FAST))
+                return
             print(NOTHING_YET_SWEEP_FAST)
+            return
+        if getattr(args, "json", False):
+            print_envelope("sweep", payload)
             return
         if getattr(args, "raw", False):
             print(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False, default=str))
@@ -538,7 +555,9 @@ def cmd_sweep(args: argparse.Namespace) -> None:
     if x_requested(args):
         script_args.append("--x")
     payload = run_raw(script_args, timeout=args.timeout)
-    if args.render_json:
+    if getattr(args, "json", False):
+        print_envelope("sweep", payload)
+    elif args.render_json:
         print(json.dumps(sweep_render_descriptor(payload, include_artifact=args.artifact), ensure_ascii=False))
     else:
         print(compact_sweep(payload, include_artifact=args.artifact))
@@ -558,7 +577,9 @@ def cmd_strategy_paper(args: argparse.Namespace) -> None:
         max_notional_usd=args.max_notional_usd,
         liquidity_bps=args.liquidity_bps,
     )
-    if args.render_json:
+    if getattr(args, "json", False):
+        print_envelope("strategy-paper", decision)
+    elif args.render_json:
         text = render_strategy_paper(decision)
         print(json.dumps({
             "text": _descriptor_text(text),
@@ -614,7 +635,9 @@ def cmd_smart_signals(args: argparse.Namespace) -> None:
         payload = fetch_wallets(tier=getattr(args, "tier", None))
     else:
         payload = fetch_live_signals(limit=args.limit)
-    if getattr(args, "raw", False):
+    if getattr(args, "json", False):
+        print_envelope("smart-signals", payload)
+    elif getattr(args, "raw", False):
         print(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False, default=str))
     elif args.render_json:
         print(json.dumps({
@@ -640,6 +663,9 @@ def cmd_wallets(args: argparse.Namespace) -> None:
     db = Path(args.db).expanduser() if getattr(args, "db", None) else SMART_DB
     enriched: list[dict[str, Any]] = []
     if args.discover and not db.exists():
+        if getattr(args, "json", False):
+            print_envelope("wallets", json_status("no-wallet-db", NOTHING_YET_WALLETS))
+            return
         print(NOTHING_YET_WALLETS)
         return
     try:
@@ -666,6 +692,11 @@ def cmd_wallets(args: argparse.Namespace) -> None:
     payload["enriched_now"] = enriched
     enrich_failures = sum(1 for e in enriched if "error" in e)
     payload["ok"] = enrich_failures == 0
+    if getattr(args, "json", False):
+        print_envelope("wallets", payload)
+        if enrich_failures:
+            raise SystemExit(1)
+        return
     if getattr(args, "raw", False):
         print(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False, default=str))
         if enrich_failures:
@@ -727,6 +758,9 @@ def cmd_wallets_edit(args: argparse.Namespace) -> None:
         message = f"removed {address} from the roster"
     roster["source"] = "user-edited"
     path.write_text(json.dumps(roster, indent=2) + "\n", encoding="utf-8")
+    if getattr(args, "json", False):
+        print_envelope("wallets --add" if args.add else "wallets --remove", json_status("added" if args.add else "removed", message))
+        return
     print(message)
 
 
@@ -784,12 +818,18 @@ def cmd_wallets_review(args: argparse.Namespace) -> None:
     db = Path(args.db).expanduser() if getattr(args, "db", None) else SMART_DB
     try:
         if not db.exists() or not has_completed_ingest(db):
+            if getattr(args, "json", False):
+                print_envelope("wallets --review", json_status("no-ingest", NO_INGEST_REVIEW))
+                return
             print(NO_INGEST_REVIEW)
             return
         roster = load_roster(PROFILE_HOME / "trading" / "config" / "roster.json", lenient_tiers=True)
         rows = roster_review(db, roster["records"], args.days, datetime.now(timezone.utc))
     except sqlite3.DatabaseError as exc:
         raise SystemExit(unreadable_db(db, exc))
+    if getattr(args, "json", False):
+        print_envelope("wallets --review", rows)
+        return
     if getattr(args, "raw", False):
         print(json.dumps(rows, indent=2, ensure_ascii=False))
         return
@@ -824,6 +864,9 @@ def cmd_paper_report(args: argparse.Namespace) -> None:
         payload = json.loads(proc.stdout)
     except Exception:
         print(proc.stdout.strip()[:2000])
+        return
+    if getattr(args, "json", False):
+        print_envelope("paper-report", payload)
         return
     if getattr(args, "raw", False):
         print(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False, default=str))
@@ -870,6 +913,7 @@ def main() -> None:
     sp.add_argument("--artifact", action="store_true", help="Include saved artifact path")
     sp.add_argument("--raw", action="store_true", help="Emit raw JSON payload")
     sp.add_argument("--render-json", action="store_true", help="Emit render descriptor JSON")
+    sp.add_argument("--json", action="store_true", help=JSON_HELP)
     sp.add_argument("--timeout", type=int, default=520)
     sp.set_defaults(func=cmd_sweep)
 
@@ -887,6 +931,7 @@ def main() -> None:
     tp.add_argument("--slow", action="store_true", help=argparse.SUPPRESS)
     tp.add_argument("--artifact", action="store_true", help="Include saved artifact path")
     tp.add_argument("--render-json", action="store_true", help="Emit render descriptor JSON")
+    tp.add_argument("--json", action="store_true", help=JSON_HELP)
     tp.add_argument("--timeout", type=int, default=480)
     tp.set_defaults(func=cmd_token)
 
@@ -900,6 +945,7 @@ def main() -> None:
     ap.add_argument("--gmgn", action="store_true", help="Attach secondary read-only GMGN evidence after primary classification")
     ap.add_argument("--artifact", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--render-json", action="store_true", help="Emit render descriptor JSON")
+    ap.add_argument("--json", action="store_true", help=JSON_HELP)
     ap.add_argument("--timeout", type=int, default=620)
     ap.set_defaults(func=cmd_analyze)
 
@@ -915,6 +961,7 @@ def main() -> None:
     stp.add_argument("--liquidity-bps", type=float, default=50.0)
     stp.add_argument("--raw", action="store_true")
     stp.add_argument("--render-json", action="store_true", help="Emit render descriptor JSON")
+    stp.add_argument("--json", action="store_true", help=JSON_HELP)
     stp.add_argument("--timeout", type=int, default=620)
     stp.set_defaults(func=cmd_strategy_paper)
 
@@ -924,12 +971,14 @@ def main() -> None:
     ssp.add_argument("--tier", choices=("A", "B", "C"), default=None, help="Filter the wallet universe by tier")
     ssp.add_argument("--raw", action="store_true", help="Emit raw JSON payload")
     ssp.add_argument("--render-json", action="store_true", help="Emit render descriptor JSON")
+    ssp.add_argument("--json", action="store_true", help=JSON_HELP)
     ssp.set_defaults(func=cmd_smart_signals)
 
     prp = sub.add_parser("paper-report", help="Paper learning report: outcomes, blockers, rule recommendations")
     prp.add_argument("--limit", type=int, default=250)
     prp.add_argument("--raw", action="store_true", help="Emit raw JSON payload")
     prp.add_argument("--render-json", action="store_true", help="Emit render descriptor JSON")
+    prp.add_argument("--json", action="store_true", help=JSON_HELP)
     prp.add_argument("--timeout", type=int, default=120)
     prp.set_defaults(func=cmd_paper_report)
 
@@ -945,6 +994,7 @@ def main() -> None:
     wp.add_argument("--db", default=None, help=argparse.SUPPRESS)
     wp.add_argument("--raw", action="store_true", help="Emit raw JSON payload")
     wp.add_argument("--render-json", action="store_true", help="Emit render descriptor JSON")
+    wp.add_argument("--json", action="store_true", help=JSON_HELP)
     wp.set_defaults(func=cmd_wallets)
 
     hp = sub.add_parser("help", help="Show simple commands")
@@ -979,11 +1029,15 @@ Optional CLI flags:
 - analyze token <mint> --gmgn    (secondary GMGN evidence; primary Helius/Dex gates unchanged)
 
 Output is a compact card: stats, copy blocks, Open DEX/SOL links, and next-command blocks. Artifacts are saved silently unless --artifact/slow analyze is used.
+sweep, token, analyze, strategy-paper, paper-report, smart-signals, and wallets take --json, which prints one envelope (schema_version, command, generated_at, data) in place of the card; --raw keeps the older unwrapped payload.
 Advisory + paper only. No wallet, signing, routing, or live execution.""".strip()))
 
     args = p.parse_args(argv)
     if args.cmd == "wallets" and bool(args.add) != bool(args.tier):
         wp.error("--add needs --tier A, B, or C" if args.add else "--tier goes with --add")
+    if getattr(args, "json", False) and (getattr(args, "raw", False) or getattr(args, "render_json", False)):
+        print(JSON_EXCLUSIVE, file=sys.stderr)
+        raise SystemExit(2)
     try:
         args.func(args)
     except sqlite3.DatabaseError as exc:  # wherever this platform's SQLite first notices the damage

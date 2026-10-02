@@ -170,7 +170,7 @@ The limits in this release:
 | Paper autopilot | `chaos run chaos_paper_autopilot_tick`; the report is `chaos paper-report` |
 | External signal feed | `chaos smart-signals`, or `--wallets` with an optional `--tier` of A, B, or C. Its wallets are cached under `trading/cache/smart_money` and never enter the roster or `smart_wallets.sqlite` |
 
-`chaos token` and `chaos analyze token` also take `--gmgn`, which attaches the optional GMGN cross-check to a slow read. It is off by default. `chaos run` with an unknown name lists every script it accepts. Every `chaos run` needs a home that `chaos onboard` has set up.
+`chaos token` and `chaos analyze token` also take `--gmgn`, which attaches the optional GMGN cross-check to a slow read. It is off by default. `chaos wallets`, the token reads, `chaos paper-report`, and `chaos smart-signals` take `--json` for one machine-readable envelope, described in the README's Configuration section. `chaos run` with an unknown name lists every script it accepts. Every `chaos run` needs a home that `chaos onboard` has set up.
 
 ## What this lane does not do
 

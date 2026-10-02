@@ -4,6 +4,7 @@ All notable changes to this package. Dates are UTC.
 
 ## 0.1.0 — 2026-10-02 (initial public release)
 
+- `--json` on `sweep`, `token`, `analyze`, `strategy-paper`, `paper-report`, `smart-signals`, and `wallets` prints one envelope (`schema_version` "1", `command`, `generated_at`, `data`) with home paths shown as `$CHAOS_HOME` and keys redacted; `--raw` output is unchanged, and a verb with nothing to show yet returns its sentence as `data` `{"status", "message"}` with exit 0.
 - 14 skills, including wallet watchlist imports with a validator and EVM read guidance; the pipeline reads Solana only.
 - Releases go to PyPI as `chaos-trader` through trusted publishing: a `vX.Y.Z` tag runs `.github/workflows/publish.yml`, which refuses a tag that differs from the package version, builds the wheel and sdist, and uploads them with no stored token.
 - `chaos wallets --add <address> --tier A|B|C` and `chaos wallets --remove <address>` edit the home roster; they never call the chain and mark the file `user-edited`.

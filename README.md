@@ -174,6 +174,8 @@ The paper-trading rules are in `CHAOS_HOME/trading/config/paper_autopilot.yaml`.
 
 The defaults and the reason for each are in `docs/why-these-defaults.md`.
 
+Every pipeline verb (`sweep`, `token`, `analyze`, `strategy-paper`, `paper-report`, `smart-signals`, `wallets`) accepts `--json` and prints one envelope: `schema_version`, `command`, `generated_at`, `data`. `--raw` keeps the older unwrapped payload. The schema version changes only when a field's meaning changes. `--json` with `--raw` or `--render-json` exits 2. In the envelope, paths under the home read `$CHAOS_HOME` and the Helius and xAI keys are redacted. Where a verb has nothing to show yet and prints one sentence, `data` is `{"status": ..., "message": "<that sentence>"}` and the exit code stays 0. The status is `no-ingest` for `chaos sweep --fast` and `chaos wallets --review` before the first ingest, and `no-wallet-db` for `chaos wallets --discover` before the wallet database exists. `chaos wallets --add` and `--remove` return `added` or `removed` the same way.
+
 ## How it works
 
 ![How chaos-trader operates: sources, pipeline, surfaces, and the execution boundary](docs/architecture.svg)
