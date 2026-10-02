@@ -1,0 +1,42 @@
+name: publish
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: The tag matches the package version
+        run: |
+          python -c "import pathlib, sys, tomllib; tag = sys.argv[1]; version = tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version']; sys.exit(0 if tag == version else f'tag v{tag} does not match the pyproject.toml version {version}')" "${GITHUB_REF_NAME#v}"
+      - name: Build the wheel and sdist
+        run: |
+          python -m pip install build
+          python -m build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - name: Upload to PyPI by trusted publishing
+        uses: pypa/gh-action-pypi-publish@v1.14.2

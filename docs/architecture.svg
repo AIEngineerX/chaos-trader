@@ -1,0 +1,162 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="860" viewBox="0 0 1400 860" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/>
+    </marker>
+    <marker id="arrow-dim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4b5563"/>
+    </marker>
+    <style>
+      .bg { fill: #0d1117; }
+      .col { fill: #111827; stroke: #1f2937; }
+      .coltitle { fill: #9ca3af; font-size: 12px; letter-spacing: 2px; font-weight: 600; }
+      .node { rx: 8; ry: 8; stroke-width: 1.5; }
+      .built { fill: #0f2a1f; stroke: #2ea043; }
+      .helius { fill: #2a1a0f; stroke: #d29922; }
+      .optional { fill: #15191f; stroke: #4b5563; stroke-dasharray: 5 4; }
+      .planned { fill: #1a1430; stroke: #8957e5; stroke-dasharray: 7 4; }
+      .label { fill: #e6edf3; font-size: 13px; font-weight: 600; }
+      .sub { fill: #9ca3af; font-size: 11px; }
+      .edge { fill: none; stroke: #8b949e; stroke-width: 1.4; marker-end: url(#arrow); }
+      .edge-dim { fill: none; stroke: #4b5563; stroke-width: 1.4; stroke-dasharray: 5 4; marker-end: url(#arrow-dim); }
+      .edgelabel { fill: #6b7280; font-size: 10px; }
+      .title { fill: #e6edf3; font-size: 22px; font-weight: 700; }
+      .subtitle { fill: #9ca3af; font-size: 13px; }
+      .wall { fill: none; stroke: #f85149; stroke-width: 2; stroke-dasharray: 10 6; }
+      .walltext { fill: #f85149; font-size: 13px; font-weight: 700; }
+      .legend { fill: #9ca3af; font-size: 12px; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1400" height="860"/>
+  <text class="title" x="40" y="44">chaos-trader — how it operates</text>
+  <text class="subtitle" x="40" y="66">Reads Solana wallets, ranks tokens, paper-trades them, and scores its own calls. Execution is not in this release.</text>
+
+  <!-- columns -->
+  <rect class="col" x="40" y="96" width="290" height="640" rx="10"/>
+  <text class="coltitle" x="60" y="122">SOURCES</text>
+  <rect class="col" x="370" y="96" width="560" height="640" rx="10"/>
+  <text class="coltitle" x="390" y="122">PIPELINE  (runs under CHAOS_HOME)</text>
+  <rect class="col" x="970" y="96" width="390" height="640" rx="10"/>
+  <text class="coltitle" x="990" y="122">SURFACES</text>
+
+  <!-- SOURCES -->
+  <rect class="node built" x="60" y="140" width="250" height="46"/>
+  <text class="label" x="72" y="160">Wallet roster</text><text class="sub" x="72" y="176">seed-v2, 9 public wallets, home copy wins</text>
+
+  <rect class="node built" x="60" y="200" width="250" height="46"/>
+  <text class="label" x="72" y="220">Your Solana RPC</text><text class="sub" x="72" y="236">any https endpoint, SOLANA_RPC_URL</text>
+
+  <rect class="node helius" x="60" y="260" width="250" height="46"/>
+  <text class="label" x="72" y="280">Helius RPC + Wallet API</text><text class="sub" x="72" y="296">optional key; needed for discovery + timing</text>
+
+  <rect class="node built" x="60" y="320" width="250" height="46"/>
+  <text class="label" x="72" y="340">DexScreener</text><text class="sub" x="72" y="356">keyless: prices, pairs, trending</text>
+
+  <rect class="node optional" x="60" y="380" width="250" height="46"/>
+  <text class="label" x="72" y="400">X search</text><text class="sub" x="72" y="416">xAI x_search, opt-in with --with-x</text>
+
+  <rect class="node optional" x="60" y="440" width="250" height="46"/>
+  <text class="label" x="72" y="460">Secondary evidence JSON</text><text class="sub" x="72" y="476">your own feed under trading/alpha/secondary</text>
+
+  <!-- PIPELINE row 1: ingest -->
+  <rect class="node built" x="390" y="140" width="250" height="46"/>
+  <text class="label" x="402" y="160">Elite ingest job</text><text class="sub" x="402" y="176">every 30 min · source_id solana_rpc | helius_rpc</text>
+
+  <rect class="node helius" x="660" y="140" width="250" height="46"/>
+  <text class="label" x="672" y="160">Wallet discovery</text><text class="sub" x="672" y="176">wallets --discover · needs Helius edges</text>
+
+  <rect class="node built" x="390" y="206" width="520" height="40"/>
+  <text class="label" x="402" y="224">Events DB</text><text class="sub" x="402" y="238">smart_wallets.sqlite · wallet_token_events, both source ids read together</text>
+
+  <!-- row 2: tape + token read -->
+  <rect class="node built" x="390" y="266" width="250" height="46"/>
+  <text class="label" x="402" y="286">Candidate tape</text><text class="sub" x="402" y="302">fresh elite buys + DexScreener trending</text>
+
+  <rect class="node built" x="660" y="266" width="250" height="46"/>
+  <text class="label" x="672" y="286">Token read</text><text class="sub" x="672" y="302">market, holders, deployer, flow (timing: Helius)</text>
+
+  <!-- row 3: gates + ledger -->
+  <rect class="node built" x="660" y="332" width="250" height="46"/>
+  <text class="label" x="672" y="352">Gates + classifiers</text><text class="sub" x="672" y="368">study · watch · manual-review · avoid-entry</text>
+
+  <rect class="node built" x="390" y="332" width="250" height="46"/>
+  <text class="label" x="402" y="352">Paper tick</text><text class="sub" x="402" y="368">every 5 min · simulated fills, fees, stops</text>
+
+  <rect class="node built" x="660" y="398" width="250" height="46"/>
+  <text class="label" x="672" y="418">Signal ledger</text><text class="sub" x="672" y="434">signal_ledger.sqlite · one row per read</text>
+
+  <rect class="node built" x="390" y="398" width="250" height="46"/>
+  <text class="label" x="402" y="418">Paper book</text><text class="sub" x="402" y="434">paper_autopilot.sqlite · positions, exits</text>
+
+  <!-- row 4: outcome tick + reports -->
+  <rect class="node planned" x="660" y="464" width="250" height="46"/>
+  <text class="label" x="672" y="484">Outcome tick  (planned)</text><text class="sub" x="672" y="500">every 5 min · prices each read at 1h/24h/7d</text>
+
+  <rect class="node built" x="390" y="464" width="250" height="46"/>
+  <text class="label" x="402" y="484">Reports</text><text class="sub" x="402" y="500">paper-report · calibration · blockers</text>
+
+  <rect class="node planned" x="390" y="530" width="520" height="46"/>
+  <text class="label" x="402" y="550">Scoreboard  (planned)</text><text class="sub" x="402" y="566">chaos outcomes · hit rate per label · nothing shown below 20 reads</text>
+
+  <!-- boundary wall -->
+  <rect class="wall" x="390" y="600" width="520" height="110" rx="8"/>
+  <text class="walltext" x="402" y="624">EXECUTION BOUNDARY — nothing crosses today</text>
+  <text class="sub" x="402" y="644">No keys · no signing · no swaps · no routing. Verdicts and paper fills stop here.</text>
+  <rect class="node planned" x="402" y="656" width="496" height="40"/>
+  <text class="label" x="414" y="674">Executor  (planned, off by default)</text><text class="sub" x="414" y="688">intent file → policy gate (size, daily loss, venue, kill switch) → simulate → sign with an isolated key</text>
+
+  <!-- SURFACES -->
+  <rect class="node built" x="990" y="140" width="350" height="46"/>
+  <text class="label" x="1002" y="160">chaos CLI</text><text class="sub" x="1002" y="176">onboard · token · sweep · paper · paper-report · wallets · skills</text>
+
+  <rect class="node built" x="990" y="206" width="350" height="62"/>
+  <text class="label" x="1002" y="226">Agent skills (12 SKILL.md)</text><text class="sub" x="1002" y="242">chaos skills install --for claude | codex | hermes | all</text><text class="sub" x="1002" y="258">Claude Code · Codex · Hermes read the same folder format</text>
+
+  <rect class="node optional" x="990" y="288" width="350" height="46"/>
+  <text class="label" x="1002" y="308">Chat front-end (your overlay)</text><text class="sub" x="1002" y="324">e.g. Telegram slash commands calling the CLI</text>
+
+  <rect class="node built" x="990" y="354" width="350" height="46"/>
+  <text class="label" x="1002" y="374">Verdict card</text><text class="sub" x="1002" y="390">plain text · flags · holder data or "unavailable"</text>
+
+  <!-- EDGES: sources -> pipeline -->
+  <path class="edge" d="M310,163 L390,163"/>
+  <path class="edge" d="M310,223 C350,223 350,170 390,170"/>
+  <path class="edge-dim" d="M310,283 C350,283 350,176 390,176"/>
+  <path class="edge-dim" d="M310,290 C480,290 500,150 660,160"/>
+  <path class="edge" d="M310,343 C350,343 350,289 390,289"/>
+  <path class="edge" d="M310,350 C480,350 500,300 660,296"/>
+  <path class="edge-dim" d="M310,403 C480,403 520,305 660,302"/>
+  <path class="edge-dim" d="M310,463 C500,463 560,310 660,306"/>
+  <path class="edge" d="M310,236 C480,236 520,310 660,289"/>
+
+  <!-- pipeline internal -->
+  <path class="edge" d="M515,186 L515,206"/>
+  <path class="edge-dim" d="M785,186 L785,206"/>
+  <path class="edge" d="M515,246 L515,266"/>
+  <path class="edge" d="M640,289 L660,289"/>
+  <path class="edge" d="M785,312 L785,332"/>
+  <path class="edge" d="M785,378 L785,398"/>
+  <path class="edge" d="M660,355 L640,355"/>
+  <path class="edge" d="M515,312 L515,332"/>
+  <path class="edge" d="M515,378 L515,398"/>
+  <path class="edge" d="M515,444 L515,464"/>
+  <path class="edge" d="M660,421 C650,421 650,487 640,487"/>
+  <path class="edge-dim" d="M785,444 L785,464"/>
+  <path class="edge-dim" d="M785,510 L785,530"/>
+  <path class="edge-dim" d="M515,510 L515,530"/>
+  <path class="edge-dim" d="M650,576 L650,600"/>
+
+  <!-- surfaces -->
+  <path class="edge" d="M990,163 C950,163 940,289 910,289"/>
+  <path class="edge" d="M1165,186 L1165,206"/>
+  <path class="edge-dim" d="M1165,288 L1165,268"/>
+  <path class="edge" d="M910,355 C950,355 950,377 990,377"/>
+
+  <!-- legend -->
+  <rect class="node built" x="40" y="760" width="18" height="18"/><text class="legend" x="66" y="774">built, works on any RPC</text>
+  <rect class="node helius" x="260" y="760" width="18" height="18"/><text class="legend" x="286" y="774">needs a Helius key</text>
+  <rect class="node optional" x="440" y="760" width="18" height="18"/><text class="legend" x="466" y="774">optional, off by default</text>
+  <rect class="node planned" x="650" y="760" width="18" height="18"/><text class="legend" x="676" y="774">planned, not built</text>
+  <text class="legend" x="40" y="812">Solid arrows carry data today. Dashed arrows are optional or planned. Every path above the red wall is read-only.</text>
+</svg>

@@ -1,0 +1,6 @@
+# chaos-trader profile defaults. `hermes model` or `hermes -p chaos-trader setup` overwrites the model block.
+model:
+  default: your-local-model
+  provider: custom
+  base_url: http://127.0.0.1:8080/v1
+  api_key: ""

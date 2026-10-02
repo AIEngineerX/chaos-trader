@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="420" viewBox="0 0 1400 420" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#9ca3af"/>
+    </marker>
+    <style>
+      .bg { fill: #0d1117; }
+      .step { fill: #111827; stroke: #2ea043; stroke-width: 2; rx: 14; ry: 14; }
+      .planned { fill: #15121f; stroke: #8957e5; stroke-width: 2; stroke-dasharray: 8 5; rx: 14; ry: 14; }
+      .num { fill: #2ea043; font-size: 44px; font-weight: 800; }
+      .nump { fill: #8957e5; font-size: 44px; font-weight: 800; }
+      .h { fill: #e6edf3; font-size: 22px; font-weight: 700; }
+      .p { fill: #c9d1d9; font-size: 15px; }
+      .small { fill: #8b949e; font-size: 13px; }
+      .arrow { fill: none; stroke: #9ca3af; stroke-width: 2.5; marker-end: url(#a); }
+      .wall { fill: none; stroke: #f85149; stroke-width: 3; stroke-dasharray: 14 8; }
+      .walltext { fill: #f85149; font-size: 18px; font-weight: 800; letter-spacing: 1px; }
+      .title { fill: #e6edf3; font-size: 26px; font-weight: 800; }
+      .sub { fill: #9ca3af; font-size: 15px; }
+    </style>
+  </defs>
+  <rect class="bg" width="1400" height="420"/>
+  <text class="title" x="40" y="50">chaos-trader in four steps</text>
+  <text class="sub" x="40" y="76">Runs on your machine, with your own RPC. Works inside Claude Code, Codex, or Hermes as a set of skills.</text>
+
+  <!-- step 1 -->
+  <rect class="step" x="40" y="110" width="300" height="190"/>
+  <text class="num" x="62" y="160">1</text>
+  <text class="h" x="110" y="152">Watch wallets</text>
+  <text class="p" x="62" y="196">A list of wallets you choose.</text>
+  <text class="p" x="62" y="220">Every buy and sell they make</text>
+  <text class="p" x="62" y="244">is read from the chain and stored.</text>
+  <text class="small" x="62" y="282">any Solana RPC</text>
+
+  <path class="arrow" d="M340,205 L378,205"/>
+
+  <!-- step 2 -->
+  <rect class="step" x="380" y="110" width="300" height="190"/>
+  <text class="num" x="402" y="160">2</text>
+  <text class="h" x="450" y="152">Rank tokens</text>
+  <text class="p" x="402" y="196">Tokens those wallets touch are</text>
+  <text class="p" x="402" y="220">checked: liquidity, holders, who</text>
+  <text class="p" x="402" y="244">deployed it, how money flows.</text>
+  <text class="small" x="402" y="282">verdict: study · watch · avoid</text>
+
+  <path class="arrow" d="M680,205 L718,205"/>
+
+  <!-- step 3 -->
+  <rect class="step" x="720" y="110" width="300" height="190"/>
+  <text class="num" x="742" y="160">3</text>
+  <text class="h" x="790" y="152">Paper-trade</text>
+  <text class="p" x="742" y="196">Simulated positions with real</text>
+  <text class="p" x="742" y="220">fees, slippage, and stops.</text>
+  <text class="p" x="742" y="244">No money moves.</text>
+  <text class="small" x="742" y="282">every 5 minutes, on a schedule</text>
+
+  <path class="arrow" d="M1020,205 L1058,205"/>
+
+  <!-- step 4 planned -->
+  <rect class="planned" x="1060" y="110" width="300" height="190"/>
+  <text class="nump" x="1082" y="160">4</text>
+  <text class="h" x="1130" y="152">Score the calls</text>
+  <text class="p" x="1082" y="196">Each verdict is priced again</text>
+  <text class="p" x="1082" y="220">hours and days later, so you</text>
+  <text class="p" x="1082" y="244">see which labels were right.</text>
+  <text class="small" x="1082" y="282">planned next · nothing shown under 20 reads</text>
+
+  <!-- wall -->
+  <rect class="wall" x="40" y="330" width="1320" height="60" rx="12"/>
+  <text class="walltext" x="62" y="358">IT NEVER SIGNS A TRANSACTION.</text>
+  <text class="p" x="62" y="380">No keys, no swaps, no routing. Everything above is read-only. An executor is designed, not built, and will ship off by default.</text>
+</svg>

@@ -1,0 +1,84 @@
+# Secrets / local env
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.mobileprovision
+secrets/
+private/
+auth.json
+config.yaml
+!/config.yaml
+config.local.yaml
+
+# Chaos private runtime state
+trading/db/
+trading/alpha/
+trading/reports/
+trading/watchlists/
+trading/journal/
+trading/intake/
+trading/cache/
+logs/
+memories/
+
+# Hermes profile state (never shipped)
+.env.EXAMPLE
+state.db*
+hermes_state.db*
+response_store.db*
+memories/
+sessions/
+logs/
+cache/
+cron/output/
+cron/.tick.lock
+gateway.pid
+gateway_state.json
+active_profile
+.hermes_history
+trading/state/
+
+# Python/runtime
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+node_modules/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Databases/artifacts
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.tmp
+
+# Package build outputs
+chaos_trader/skills/
+dist-package/
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.age
+.tmp/
+trading/data/
+
+# Python packaging
+.venv/
+dist/
+build/
+*.egg-info/
+.tmp/

@@ -1,0 +1,23 @@
+name: chaos-trader
+version: 0.1.0
+description: "Solana wallet research, token ranking, and paper trading. Read-only; nothing in this profile signs or sends."
+hermes_requires: ">=0.21.0"
+author: "chaos-trader contributors"
+license: "MIT"
+env_requires:
+  - name: SOLANA_RPC_URL
+    description: "Any https Solana JSON-RPC endpoint. The public one works for a first look."
+    required: false
+    default: "https://api.mainnet-beta.solana.com"
+  - name: HELIUS_API_KEY
+    description: "Optional. Unlocks wallet discovery and deep wallet reads."
+    required: false
+    default: ""
+  - name: XAI_API_KEY
+    description: "Optional. xAI key for X evidence with citations; metered."
+    required: false
+    default: ""
+  - name: X_SEARCH_PROVIDER
+    description: "xai, hermes, or none. Leave unset to pick from the keys present."
+    required: false
+    default: ""

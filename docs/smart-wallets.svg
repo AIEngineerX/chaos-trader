@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/>
+    </marker>
+    <marker id="arrow-dim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4b5563"/>
+    </marker>
+    <style>
+      .bg { fill: #0d1117; }
+      .col { fill: #111827; stroke: #1f2937; }
+      .coltitle { fill: #9ca3af; font-size: 12px; letter-spacing: 2px; font-weight: 600; }
+      .node { rx: 8; ry: 8; stroke-width: 1.5; }
+      .built { fill: #0f2a1f; stroke: #2ea043; }
+      .helius { fill: #2a1a0f; stroke: #d29922; }
+      .optional { fill: #15191f; stroke: #4b5563; stroke-dasharray: 5 4; }
+      .label { fill: #e6edf3; font-size: 13px; font-weight: 600; }
+      .sub { fill: #9ca3af; font-size: 11px; }
+      .edge { fill: none; stroke: #8b949e; stroke-width: 1.4; marker-end: url(#arrow); }
+      .edge-dim { fill: none; stroke: #4b5563; stroke-width: 1.4; stroke-dasharray: 5 4; marker-end: url(#arrow-dim); }
+      .edgelabel { fill: #6b7280; font-size: 10px; }
+      .title { fill: #e6edf3; font-size: 22px; font-weight: 700; }
+      .subtitle { fill: #9ca3af; font-size: 13px; }
+      .legend { fill: #9ca3af; font-size: 12px; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1200" height="640"/>
+  <text class="title" x="30" y="42">chaos-trader: the smart-wallet lane</text>
+  <text class="subtitle" x="30" y="64">From the seed roster to the paper book</text>
+
+  <!-- columns -->
+  <rect class="col" x="20" y="84" width="220" height="446" rx="10"/>
+  <text class="coltitle" x="34" y="108">SOURCES</text>
+  <rect class="col" x="250" y="84" width="220" height="446" rx="10"/>
+  <text class="coltitle" x="264" y="108">HISTORY READ</text>
+  <rect class="col" x="480" y="84" width="220" height="446" rx="10"/>
+  <text class="coltitle" x="494" y="108">SMART_WALLETS.SQLITE</text>
+  <rect class="col" x="710" y="84" width="220" height="446" rx="10"/>
+  <text class="coltitle" x="724" y="108">SCORING</text>
+  <rect class="col" x="940" y="84" width="240" height="446" rx="10"/>
+  <text class="coltitle" x="954" y="108">READERS</text>
+
+  <!-- SOURCES -->
+  <rect class="node built" x="30" y="126" width="200" height="64"/>
+  <text class="label" x="42" y="146">roster.json</text>
+  <text class="sub" x="42" y="163">9 wallets, tiers A, B, C</text>
+  <text class="sub" x="42" y="179">address + tier only, public seed</text>
+
+  <rect class="node helius" x="30" y="210" width="200" height="64"/>
+  <text class="label" x="42" y="230">Discovery queue</text>
+  <text class="sub" x="42" y="247">unscored wallets on edges</text>
+  <text class="sub" x="42" y="263">empty on any other RPC</text>
+
+  <rect class="node optional" x="30" y="294" width="200" height="64"/>
+  <text class="label" x="42" y="314">Secondary JSON</text>
+  <text class="sub" x="42" y="331">8 files under alpha/secondary</text>
+  <text class="sub" x="42" y="347">optional, read if present</text>
+
+  <!-- HISTORY READ -->
+  <rect class="node built" x="260" y="126" width="200" height="64"/>
+  <text class="label" x="272" y="146">Any https RPC</text>
+  <text class="sub" x="272" y="163">getSignaturesForAddress</text>
+  <text class="sub" x="272" y="179">+ getTransaction, solana_rpc</text>
+
+  <rect class="node helius" x="260" y="210" width="200" height="64"/>
+  <text class="label" x="272" y="230">Helius RPC</text>
+  <text class="sub" x="272" y="247">getTransactionsForAddress</text>
+  <text class="sub" x="272" y="263">source_id helius_rpc</text>
+
+  <rect class="node helius" x="260" y="294" width="200" height="64"/>
+  <text class="label" x="272" y="314">Helius wallet API pass</text>
+  <text class="sub" x="272" y="331">tracker only: identity, funder</text>
+  <text class="sub" x="272" y="347">transfers, the only edge writer</text>
+
+  <!-- DATABASE -->
+  <rect class="node built" x="490" y="126" width="200" height="148"/>
+  <text class="label" x="502" y="146">Filled by ingest + tracker</text>
+  <text class="sub" x="502" y="166">wallet_token_events</text>
+  <text class="sub" x="502" y="184">positions</text>
+  <text class="sub" x="502" y="202">transactions</text>
+  <text class="sub" x="502" y="220">ingestion_runs (roster sha256)</text>
+  <text class="sub" x="502" y="238">wallet_scores (tracker)</text>
+  <text class="sub" x="502" y="256">wallet_edges (wallet API)</text>
+
+  <rect class="node optional" x="490" y="294" width="200" height="82"/>
+  <text class="label" x="502" y="314">token_signals and friends</text>
+  <text class="sub" x="502" y="331">no writer in this release</text>
+  <text class="sub" x="502" y="347">secondary rows, actors, claims</text>
+  <text class="sub" x="502" y="363">cohorts, concentration</text>
+
+  <!-- SCORING -->
+  <rect class="node built" x="720" y="240" width="200" height="64"/>
+  <text class="label" x="732" y="260">Tracker score</text>
+  <text class="sub" x="732" y="277">clean closed positions</text>
+  <text class="sub" x="732" y="293">candidate, watch, study, avoid</text>
+
+  <rect class="node built" x="720" y="324" width="200" height="64"/>
+  <text class="label" x="732" y="344">Promoter verdicts</text>
+  <text class="sub" x="732" y="361">stores no score or verdict</text>
+  <text class="sub" x="732" y="377">tiers never recomputed</text>
+
+  <rect class="node built" x="720" y="408" width="200" height="48"/>
+  <text class="label" x="732" y="428">Promotions file</text>
+  <text class="sub" x="732" y="445">written with --write or --discover</text>
+  <text class="edgelabel" x="722" y="474">roster + promotions feed watch hits</text>
+
+  <!-- READERS -->
+  <rect class="node built" x="950" y="126" width="220" height="56"/>
+  <text class="label" x="962" y="146">Fast tape + sweep --fast</text>
+  <text class="sub" x="962" y="164">45 min, 2+ wallets = watch</text>
+
+  <rect class="node built" x="950" y="198" width="220" height="56"/>
+  <text class="label" x="962" y="218">Elite paper cohort</text>
+  <text class="sub" x="962" y="236">one roster buy opens an episode</text>
+
+  <rect class="node built" x="950" y="270" width="220" height="72"/>
+  <text class="label" x="962" y="290">Paper autopilot</text>
+  <text class="sub" x="962" y="308">roster buys + track record</text>
+  <text class="sub" x="962" y="326">tier weights A=3, B=2, C=1</text>
+
+  <rect class="node built" x="950" y="420" width="220" height="64"/>
+  <text class="label" x="962" y="440">Slow token read</text>
+  <text class="sub" x="962" y="457">chaos token, analyze token</text>
+  <text class="sub" x="962" y="473">roster, promoter, watch files</text>
+
+  <!-- EDGES: sources to history read -->
+  <path class="edge" d="M230,158 L260,158"/>
+  <path class="edge" d="M230,172 C245,172 245,228 260,228"/>
+  <path class="edge" d="M230,250 L260,250"/>
+
+  <!-- history read to database -->
+  <path class="edge" d="M460,158 L490,158"/>
+  <path class="edge" d="M460,242 C475,242 475,210 490,210"/>
+  <path class="edge" d="M460,326 C477,326 477,256 490,256"/>
+
+  <!-- database to readers -->
+  <text class="edgelabel" x="712" y="146">fresh buys from ingest runs</text>
+  <path class="edge" d="M690,154 L950,154"/>
+  <path class="edge" d="M690,176 L924,176 C940,176 934,226 950,226"/>
+  <path class="edge" d="M690,198 L912,198 C944,198 930,306 950,306"/>
+
+  <!-- database to scoring -->
+  <path class="edge" d="M690,264 L720,264"/>
+  <path class="edge" d="M820,304 L820,324"/>
+  <path class="edge" d="M820,388 L820,408"/>
+
+  <!-- solid: promotions to the slow token read; dashed: secondary to the slow token read -->
+  <path class="edge" d="M920,432 C936,432 934,452 950,452"/>
+  <path class="edge-dim" d="M130,358 L130,512 L1060,512 L1060,486"/>
+  <text class="edgelabel" x="300" y="506">watch files, if present</text>
+
+  <!-- legend -->
+  <rect class="node built" x="20" y="560" width="18" height="18"/><text class="legend" x="46" y="574">works on any RPC</text>
+  <rect class="node helius" x="200" y="560" width="18" height="18"/><text class="legend" x="226" y="574">needs Helius</text>
+  <rect class="node optional" x="350" y="560" width="18" height="18"/><text class="legend" x="376" y="574">optional, or no writer yet</text>
+  <text class="legend" x="20" y="610">Solid arrows carry data today.</text>
+  <text class="legend" x="240" y="610">Dashed: empty on a fresh install.</text>
+  <text class="legend" x="500" y="610">Nothing here signs a transaction.</text>
+</svg>

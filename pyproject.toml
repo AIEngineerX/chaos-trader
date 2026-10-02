@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=83"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chaos-trader"
+version = "0.1.0"
+description = "Solana wallet research, token ranking, and paper trading. Execution is not in this release."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.11"
+keywords = ["solana", "trading-research", "paper-trading", "agent-skills", "dexscreener"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = [
+  "PyYAML>=6,<7",
+]
+
+[project.urls]
+Repository = "https://github.com/AIEngineerX/chaos-trader"
+Issues = "https://github.com/AIEngineerX/chaos-trader/issues"
+Changelog = "https://github.com/AIEngineerX/chaos-trader/blob/main/CHANGELOG.md"
+
+[project.scripts]
+chaos = "chaos_trader.cli:main"
+
+[tool.setuptools]
+packages = ["chaos_trader", "chaos_trader.trading", "chaos_trader.trading.scripts", "chaos_trader.jobs", "chaos_trader.seed", "chaos_trader.trading.config", "chaos_trader.trading.schemas"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+chaos_trader = [
+  "trading/schemas/*.sql",
+  "trading/config/*.yaml",
+  "skills/**/*",
+  "seed/*.json",
+]

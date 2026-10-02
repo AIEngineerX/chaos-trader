@@ -1,0 +1,189 @@
+version: 1
+mode: paper_only
+policy:
+  version: paper_policy_p0_v4_multilane
+boundary:
+  no_execution: true
+  no_wallet: true
+  no_signing: true
+  no_order_routing: true
+  no_swap_links: true
+  no_webhooks: true
+  no_live_alerts: true
+  allowed_outputs:
+  - paper_enter
+  - paper_wait
+  - paper_avoid
+  - paper_trim
+  - paper_exit
+  - paper_expire
+  forbidden_words:
+  - swap
+  - snipe
+  - execute
+  - route
+  - sign
+  - submit
+  - live_order
+  - live_execution
+paths:
+  sqlite: trading/db/paper_autopilot.sqlite
+  reports_dir: trading/reports/paper_autopilot
+  artifacts_dir: trading/alpha/paper_autopilot
+loop:
+  enabled: false
+  discovery_interval_sec: 30
+  candidate_refresh_sec: 10
+  position_refresh_sec: 5
+  outcome_windows:
+  - 15m
+  - 1h
+  - 4h
+  - 24h
+  daily_report: true
+  daily_report_time_local: '21:00'
+budgets:
+  max_candidates: 30
+  max_open_positions: 3
+  max_new_entries_per_hour: 5
+  max_new_entries_per_day: 25
+  max_same_narrative_positions: 2
+  max_same_source_positions: 2
+pre_filter:
+  chain: solana
+  min_liquidity_usd_soft: 15000
+  min_liquidity_usd_hard: 7500
+  min_market_cap_usd: 25000
+  max_market_cap_usd: 2500000
+  max_pair_age_hours: 6
+  reject_h1_drawdown_pct: -60
+  reject_h1_up_without_prior_watch_pct: 500
+  reject_volume_liquidity_ratio: 100
+deep_analyze:
+  enabled: true
+  max_per_day: 100
+  max_per_hour: 10
+  cooldown_per_mint_min: 10
+  candidate_max_age_hours: 24
+  tx_limit: 40
+  trigger:
+    min_liquidity_usd: 25000
+    min_market_cap_usd: 25000
+    max_market_cap_usd: 750000
+    min_h1_price_change_pct: 20
+    max_h1_price_change_pct: 180
+    min_volume_liquidity_ratio: 2
+    max_volume_liquidity_ratio: 25
+    repeat_sweep_hits_required: 2
+    repeat_sweep_window_min: 5
+market_discovery:
+  enabled: true
+  limit: 5
+  min_liquidity_usd: 25000
+  min_market_cap_usd: 25000
+  max_market_cap_usd: 750000
+  min_h1_price_change_pct: 10
+  max_h1_price_change_pct: 180
+  min_volume_liquidity_ratio: 1.5
+  max_volume_liquidity_ratio: 25
+  repeat_sweep_hits_required: 2
+  probe_notional_usd: 25
+# X is per-command only: the scheduled tick never passes --with-x; these caps apply when a run does.
+x_research:
+  max_per_day: 25
+  max_per_hour: 5
+  lookback_days: 2
+paper_size:
+  base_risk_usd: 100
+  max_notional_usd: 250
+  liquidity_bps: 50
+  min_simulated_size_usd: 25
+entry:
+  avoided_retry_min: 240
+  allowed_decisions:
+  - paper_enter
+  allowed_entry_gates:
+  - micro-watch
+  - watch
+  - deep-check
+  - manual-review
+  blocked_entry_gates:
+  - avoid-entry
+  - exit-liquidity-watch
+  min_liquidity_usd: 25000
+  max_adjusted_holder_concentration_pct: 45
+  warn_adjusted_holder_concentration_pct: 35
+  require_wallet_or_catalyst: true
+  # When true, a paper entry may cite smart-wallet evidence as its reason. When false,
+  # wallet evidence cannot be the stated reason for an entry. Either way the mode stays
+  # paper_only and the boundary above (no_execution/no_wallet/no_signing) is unchanged.
+  wallet_signal_lane_enabled: true
+  # How many independent elite wallets, and what weighted score, a token needs before
+  # the wallet lane counts it. Lower values let the paper loop enter more often; higher
+  # values make it stricter. These are the dial for how often the paper loop trades.
+  min_independent_elite_wallets: 1
+  min_elite_weighted_score: 1
+  min_wallet_clean_closed_positions: 3
+  min_wallet_realized_pnl_sol: 0.0
+  min_wallet_win_rate: 0.4
+  single_wallet_a_probe_enabled: true
+  single_wallet_a_probe_notional_usd: 25
+  allow_high_fake_flow_only_if_converting: true
+  blocked_social_catalysts:
+  - spam-raid
+exit:
+  stop_pct_conviction: -25
+  stop_pct_low_cap: -30
+  tp1_pct: 75
+  tp1_trim_pct: 50
+  tp2_pct: 200
+  tp2_trim_pct: 25
+  trailing_stop_after_tp1_pct: -35
+  low_cap_time_stop_min: 15
+  conviction_time_stop_min: 25
+  liquidity_break_pct: -25
+  exit_on_gate_flip:
+  - avoid-entry
+  - exit-liquidity-watch
+  exit_on_flow_conversion:
+  - dead-churn
+  - exit-liquidity-churn
+paper_fee_model:
+  estimated: true
+  provenance: paper-only conservative fixed-bps estimate; not execution quote
+  entry_bps: 100
+  exit_bps: 100
+  entry_slippage_bps: 150
+  exit_slippage_bps: 150
+risk:
+  max_daily_loss_r: -3
+  max_consecutive_losses: 3
+  pause_after_consecutive_losses_min: 60
+  pause_on_deep_analyze_errors_per_hour: 10
+  pause_on_dex_errors_per_hour: 25
+  disable_x_on_x_errors_per_hour: 5
+  degrade_to_market_only_when_budget_exhausted: true
+llm:
+  fast_loop: false
+  daily_summary: true
+  rule_critique: true
+  estimated_daily_main_model_tokens:
+    input: 12000
+    output: 1500
+    total: 13500
+logging:
+  compact_console: true
+  persist_all_decisions: true
+  persist_avoided_candidates: true
+  redact_owner_wallets: true
+  daily_report_sections:
+  - paper_entries
+  - avoided_winners
+  - entered_losers
+  - wait_to_winner_misses
+  - best_catalyst_type
+  - worst_catalyst_type
+  - fake_flow_outcomes
+  - liquidity_band_performance
+  - holder_concentration_performance
+  - proposed_rule_changes

@@ -1,0 +1,12 @@
+title = "Chaos portable package gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public Solana token-address fixture in wallet-output unit test history; not a credential."
+condition = "AND"
+paths = ['''(?:^|/)trading/scripts/test_wallet_output\.py$''']
+regexTarget = "secret"
+regexes = ['''^Ap3jN5zsj3vpR4r4qvq26iyFGv2vAf1XWLn8QWhTpump$''']
+rules = ["generic-api-key"]

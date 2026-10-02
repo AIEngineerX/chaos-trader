@@ -1,0 +1,54 @@
+{
+  "id": "placeholder-response-id",
+  "object": "response",
+  "created_at": 1790000000,
+  "status": "completed",
+  "model": "grok-4.5",
+  "output": [
+    {
+      "type": "custom_tool_call",
+      "name": "x_keyword_search",
+      "input": "{\"query\": \"placeholder query\"}",
+      "status": "completed"
+    },
+    {
+      "type": "message",
+      "role": "assistant",
+      "id": "msg_placeholder",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "@placeholder_handle posted that the token launched today.[[1]](https://x.com/placeholder_handle/status/1) A second account, @placeholder_handle_two, repeated the claim.[[2]](https://x.com/placeholder_handle_two/status/2)",
+          "logprobs": [],
+          "annotations": [
+            {
+              "type": "url_citation",
+              "url": "https://x.com/placeholder_handle/status/1",
+              "title": "1",
+              "start_index": 57,
+              "end_index": 106
+            },
+            {
+              "type": "url_citation",
+              "url": "https://x.com/placeholder_handle_two/status/2",
+              "title": "2",
+              "start_index": 163,
+              "end_index": 216
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "citations": [
+    "https://x.com/placeholder_handle/status/1",
+    "https://x.com/placeholder_handle_two/status/2",
+    "https://x.com/i/user/placeholder_user_id"
+  ],
+  "usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0
+  }
+}

@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.14"]
+    env:
+      CHAOS_HOME: ${{ github.workspace }}/.tmp/chaos-home
+      PROFILE: ${{ github.workspace }}/.tmp/chaos-home
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.24.11"
+      - name: Install gitleaks (pinned to the version used locally)
+        run: go install github.com/zricethezav/gitleaks/v8@v8.30.1
+      - name: Install package
+        run: python -m pip install -e .
+      - name: Safety check
+        run: make safety-check
+      - name: Vendor and owner name gate
+        run: make vendor-check
+      - name: Gitleaks full-history scan
+        run: PATH="$HOME/go/bin:$PATH" make gitleaks-scan
+      - name: Compile and tests
+        run: make compile test
+      - name: Build the wheel
+        run: python -m pip install build && python -m build
+      - name: Wheel carries the seed, the skills, the schema, and NOTICE
+        run: |
+          python -c "import glob, zipfile; names = set(zipfile.ZipFile(glob.glob('dist/*.whl')[0]).namelist()); need = ['chaos_trader/seed/roster.json', 'chaos_trader/skills/blockchain/solana/SKILL.md', 'chaos_trader/skills/blockchain/chaos-solana-intelligence/SKILL.md', 'chaos_trader/trading/schemas/smart_wallets_schema.sql']; missing = [n for n in need if n not in names]; assert not missing, missing; assert len([n for n in names if n.startswith('chaos_trader/skills/blockchain/') and n.endswith('/SKILL.md') and n.count('/') == 4]) == 12, 'expected 12 skills in wheel'; assert any('.dist-info/' in n and n.endswith('/NOTICE') for n in names), 'NOTICE missing from wheel'; print('wheel ok')"
+      # pip-audit cannot read a wheel file, so the wheel's own Requires-Dist lines become the requirements it audits.
+      - name: Audit the wheel's dependencies
+        run: |
+          python -m pip install pip-audit
+          python -c "import glob, zipfile; z = zipfile.ZipFile(glob.glob('dist/*.whl')[0]); meta = next(n for n in z.namelist() if n.endswith('.dist-info/METADATA')); reqs = [l.split(':', 1)[1].strip() for l in z.read(meta).decode().splitlines() if l.startswith('Requires-Dist:')]; open('$RUNNER_TEMP/wheel-requirements.txt', 'w').write(''.join(r + '\n' for r in reqs))"
+          python -m pip_audit --strict --progress-spinner off -r "$RUNNER_TEMP/wheel-requirements.txt"
+      - name: Full-history private-name scan
+        run: python tools/history_name_scan.py
+      - name: Clean-home onboard smoke
+        run: |
+          chaos onboard --home "$RUNNER_TEMP/h" --rpc-url https://api.mainnet-beta.solana.com --yes
+          CHAOS_HOME="$RUNNER_TEMP/h" chaos help

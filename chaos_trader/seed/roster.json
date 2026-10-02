@@ -1,0 +1,43 @@
+{
+  "version": "seed-v2",
+  "captured_at": "2026-10-02",
+  "source": "public",
+  "wallets": [
+    {
+      "address": "4hwPamSooBr5JhxHdcEC21HoxN5HUwYR2hGucLPyZAi8",
+      "tier": "A"
+    },
+    {
+      "address": "FcfJmRr8wYRmE1rdrLeqvnzzJvXambDZxsjbjKyv6mCM",
+      "tier": "A"
+    },
+    {
+      "address": "AGq77pfqHyyJ7hiLdw6CRwgWRJwcZUmTfVuXd5GJV4XY",
+      "tier": "A"
+    },
+    {
+      "address": "7MRS71GYwRNmSigRKz1h9sgf4pTJnf18bfvf2S6j6k6m",
+      "tier": "B"
+    },
+    {
+      "address": "AxtZoNYhAxvpv416hW7yzpTdcJeY45t8JyGUYMJXL9G",
+      "tier": "B"
+    },
+    {
+      "address": "9GNHFWmVEw3Mbrh8Rrz1fTJMv36SxsuQrMtCq7tmrN3K",
+      "tier": "B"
+    },
+    {
+      "address": "DxM1hfY8FQ8dNGrucuJzhJcF8KRbjk8WBwrgKvQ9spPv",
+      "tier": "C"
+    },
+    {
+      "address": "3AoQmpHaVTV3tcZqWAFrYgtCPqkMkdgxib9MjtvDRsom",
+      "tier": "C"
+    },
+    {
+      "address": "7kUVkocgcMctQHye1eHEVf88DbYR5bx4fgXmcP4j5cHe",
+      "tier": "C"
+    }
+  ]
+}
