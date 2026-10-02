@@ -108,7 +108,7 @@
 
   <!-- SURFACES -->
   <rect class="node built" x="990" y="140" width="350" height="46"/>
-  <text class="label" x="1002" y="160">chaos CLI</text><text class="sub" x="1002" y="176">onboard · token · sweep · paper · paper-report · wallets · skills</text>
+  <text class="label" x="1002" y="160">chaos CLI · MCP server (chaos mcp)</text><text class="sub" x="1002" y="176">onboard · token · sweep · paper · paper-report · wallets · skills</text>
 
   <rect class="node built" x="990" y="206" width="350" height="62"/>
   <text class="label" x="1002" y="226">Agent skills (12 SKILL.md)</text><text class="sub" x="1002" y="242">chaos skills install --for claude | codex | hermes | all</text><text class="sub" x="1002" y="258">Claude Code · Codex · Hermes read the same folder format</text>

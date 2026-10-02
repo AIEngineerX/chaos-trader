@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BANNED = ["leverage", "seamless", "robust", "powerful", "cutting-edge", "unlock", "empower",
           "elevate", "supercharge", "next-generation", "revolutionize"]
 REQUIRED_HEADINGS = ["## 60-second path", "## What it does", "## Install", "## Install for Hermes", "## First run", "## Configuration",
-                     "## How it works", "## Skills", "## Running it on a schedule", "## Keeping it current", "## Execution",
+                     "## How it works", "## Skills", "## Use it from an MCP agent", "## Running it on a schedule", "## Keeping it current", "## Execution",
                      "## Security boundary", "## License"]
 EMOJI = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF]")
 # The one statement of what the package recommends; every file below carries it byte for byte.

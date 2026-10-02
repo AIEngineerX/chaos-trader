@@ -4,6 +4,7 @@ All notable changes to this package. Dates are UTC.
 
 ## 0.1.0 — 2026-10-02 (initial public release)
 
+- `chaos mcp` starts a read-only stdio MCP server named `chaos-trader` with seven tools (`token_read`, `analyze_token`, `sweep`, `strategy_paper`, `wallets_review`, `paper_report`, `roster_list`); each runs its verb with `--json` and hands back that envelope, a malformed mint is a tool error, and roster edits and the ingest stay CLI-only. `roster_list` wraps the new `chaos wallets --list`, which prints the home roster one tier and address per line and reads only the roster file. It needs the optional `mcp` extra (`mcp>=1.12,<2`); without it, or without an onboarded home, `chaos mcp` exits 2 with one line. README gains Use it from an MCP agent with Claude Code, Codex, Cursor, and ElizaOS entries.
 - `--json` on `sweep`, `token`, `analyze`, `strategy-paper`, `paper-report`, `smart-signals`, and `wallets` prints one envelope (`schema_version` "1", `command`, `generated_at`, `data`) with home paths shown as `$CHAOS_HOME` and keys redacted; `--raw` output is unchanged, and a verb with nothing to show yet returns its sentence as `data` `{"status", "message"}` with exit 0.
 - 14 skills, including wallet watchlist imports with a validator and EVM read guidance; the pipeline reads Solana only.
 - Releases go to PyPI as `chaos-trader` through trusted publishing: a `vX.Y.Z` tag runs `.github/workflows/publish.yml`, which refuses a tag that differs from the package version, builds the wheel and sdist, and uploads them with no stored token.

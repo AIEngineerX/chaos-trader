@@ -228,6 +228,69 @@ Install them for every supported agent in one command:
 - **Codex.** Writes `~/.agents/skills/<name>`, or `.agents/skills/<name>` with `--project`. Confirm with `ls ~/.agents/skills`. For a skill to run a `chaos` command, three things must hold inside Codex's shell. Its workspace-write sandbox blocks network by default: pass `-c 'sandbox_workspace_write.network_access=true'`, or set `network_access = true` under `[sandbox_workspace_write]` in `~/.codex/config.toml`. The `chaos` console script must be on `PATH`: export your venv's `bin` directory, or `Scripts` on Windows, before you start `codex`. `CHAOS_HOME` must reach the shell: a config with `shell_environment_policy.inherit = "core"` drops it, so pass `-c 'shell_environment_policy.inherit="all"'`. The run that needed all three is R2.7 in `docs/verification-2026-10-01.md`.
 - **Hermes.** A profile install already holds the skills (see Install for Hermes), so Hermes users there do not need this command. For a Hermes setup without the profile, `--for hermes` writes `<Hermes home>/skills/blockchain/<name>`. The Hermes home is found in the order Hermes itself uses: `HERMES_HOME` if set, else `%LOCALAPPDATA%\hermes` on Windows if that folder exists, else `~/.hermes` if it exists. `chaos skills install --for hermes --dry-run` prints the folder it picked. When none of the three exists, the command installs into `~/.agents/skills` and prints a `skills.external_dirs` snippet to add to your Hermes `config.yaml`. Confirm with `hermes skills list`. With `--project`, Hermes reads `.agents/skills` only after you run `hermes skills trust` in that project. That command needs a git checkout: outside one it refuses with `Not inside a git checkout` and still exits 0, so read its output.
 
+## Use it from an MCP agent
+
+`chaos mcp` starts a stdio server named `chaos-trader` for any agent that speaks the Model Context Protocol (MCP). Each of its seven tools runs the same verb as the command line with `--json` and hands the agent that envelope, so the agent sees exactly what `chaos token --json` prints. The tools are `token_read`, `analyze_token`, `sweep`, `strategy_paper`, `wallets_review`, `paper_report`, and `roster_list`. Every tool is read-only; the roster and the ingest stay on the command line on purpose. `token_read` and `analyze_token` take `with_x`, off by default; `sweep` and `strategy_paper` use X when a provider is configured, as the command line does. A malformed mint comes back as a tool error, and the server keeps running. The server needs an onboarded home and the `mcp` extra:
+
+```bash
+pip install "chaos-trader[mcp] @ git+https://github.com/AIEngineerX/chaos-trader"
+```
+
+A token read can take several minutes, so the Codex and ElizaOS entries raise their tool timeouts above the 620-second limit of `chaos analyze`. Where `chaos` is not on the agent's `PATH`, use `python` as the command with `-m chaos_trader.cli mcp` as the arguments.
+
+Claude Code:
+
+```bash
+claude mcp add --env CHAOS_HOME="$HOME/.chaos-trader" --transport stdio chaos-trader -- chaos mcp
+```
+
+Codex, in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.chaos-trader]
+command = "chaos"
+args = ["mcp"]
+tool_timeout_sec = 660
+
+[mcp_servers.chaos-trader.env]
+CHAOS_HOME = "~/.chaos-trader"
+```
+
+Cursor, in `.cursor/mcp.json` for one project or `~/.cursor/mcp.json` for all of them:
+
+```json
+{
+  "mcpServers": {
+    "chaos-trader": {
+      "command": "chaos",
+      "args": ["mcp"],
+      "env": { "CHAOS_HOME": "~/.chaos-trader" }
+    }
+  }
+}
+```
+
+ElizaOS, in the character file, per the plugin-mcp README (https://www.npmjs.com/package/@elizaos/plugin-mcp):
+
+```json
+{
+  "plugins": ["@elizaos/plugin-mcp"],
+  "settings": {
+    "mcp": {
+      "servers": {
+        "chaos-trader": {
+          "type": "stdio",
+          "command": "chaos",
+          "args": ["mcp"],
+          "env": { "CHAOS_HOME": "~/.chaos-trader" },
+          "timeoutInMillis": 660000
+        }
+      }
+    }
+  }
+}
+```
+
 ## Running it on a schedule
 
 Six job wrappers ship in the package; run each with `chaos run <name>`. Each one prints a short result. The ingest and the three paper wrappers that write a database take a lock, so two copies of the same job never run at once.
@@ -270,7 +333,7 @@ Run `chaos wallets --review` once a week. It reads `smart_wallets.sqlite` only, 
 
 Scoring a wallet is a separate step: `chaos run smart_wallet_tracker <address>`. On a Helius RPC with `HELIUS_API_KEY` set, it also pulls the wallet's transfer edges. Until a wallet is scored, its score shows `-`, and a `scoring` wallet says `not scored yet` with that command.
 
-To replace a `dormant` wallet, run `chaos wallets --add <new address> --tier A|B|C`, then `chaos wallets --remove <old address>`. Both edit `trading/config/roster.json` only and never call the chain. You can also edit that file by hand: change the address, set the tier, and add nothing else. Then run the ingest again. Tiers never change on their own, and no score edits the roster.
+To replace a `dormant` wallet, run `chaos wallets --add <new address> --tier A|B|C`, then `chaos wallets --remove <old address>`. Both edit `trading/config/roster.json` only and never call the chain, and `chaos wallets --list` prints that file's wallets with their tiers. You can also edit that file by hand: change the address, set the tier, and add nothing else. Then run the ingest again. Tiers never change on their own, and no score edits the roster.
 
 A roster wallet that carries a hard flag in any watch file is left out of token reads. A promoter `avoid` verdict also leaves it out unless the same wallet has an actor label from the secondary lane, which takes precedence. `chaos wallets --review` still lists the wallet, so check the promoter output if a wallet you expect never shows as a hit.
 

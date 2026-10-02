@@ -30,7 +30,7 @@ jobs:
       - name: Install gitleaks (pinned to the version used locally)
         run: go install github.com/zricethezav/gitleaks/v8@v8.30.1
       - name: Install package
-        run: python -m pip install -e .
+        run: python -m pip install -e ".[mcp]"
       - name: Safety check
         run: make safety-check
       - name: Vendor and owner name gate

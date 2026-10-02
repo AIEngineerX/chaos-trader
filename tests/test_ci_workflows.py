@@ -119,6 +119,11 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertNotIn("continue-on-error", scan)
         self.assertFalse([s.get("name") for s in steps if s.get("continue-on-error")])
 
+    def test_ci_installs_the_mcp_extra_so_the_server_tests_run(self):
+        steps = self.workflow["jobs"]["checks"]["steps"]
+        install = next(s for s in steps if s.get("name") == "Install package")
+        self.assertEqual(install["run"].strip(), 'python -m pip install -e ".[mcp]"')
+
 
 if __name__ == "__main__":
     unittest.main()

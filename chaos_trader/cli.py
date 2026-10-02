@@ -1,4 +1,4 @@
-"""The `chaos` command. `onboard`, `update`, `skills`, and `run` are handled here; every other verb runs the
+"""The `chaos` command. `onboard`, `update`, `skills`, `run`, and `mcp` are handled here; every other verb runs the
 package's chaos_cmd.py against CHAOS_HOME."""
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ PACKAGE = Path(__file__).resolve().parent
 SCRIPTS = PACKAGE / "trading" / "scripts"
 JOBS = PACKAGE / "jobs"
 RUN_USAGE = "chaos run <script> [args]"
+MCP_EXTRA = 'chaos mcp needs the MCP extra: pip install "chaos-trader[mcp] @ git+https://github.com/AIEngineerX/chaos-trader"'
 
 USAGE = """chaos-trader
 
@@ -34,6 +35,8 @@ USAGE = """chaos-trader
       --force replaces a same-named skill this command did not install
   chaos token <mint> | sweep | analyze token <mint> | paper-report | wallets | help
       run the pipeline commands; `chaos help` lists them
+  chaos mcp
+      serve seven read-only tools over these commands to an MCP agent on stdio; needs the mcp extra
   chaos --version
 """
 
@@ -151,6 +154,22 @@ def _run_pipeline(argv: list[str]) -> int:
     return subprocess.call([sys.executable, str(SCRIPTS / "chaos_cmd.py"), *argv], env=_script_env(home))
 
 
+def _mcp(argv: list[str]) -> int:
+    import argparse
+    argparse.ArgumentParser(prog="chaos mcp", description="Serve the read-only pipeline tools to an MCP agent on stdio.").parse_args(argv)
+    try:
+        import mcp  # noqa: F401
+    except ImportError:
+        print(MCP_EXTRA, file=sys.stderr)
+        return 2
+    home = _set_up_home()
+    if home is None:
+        return 2
+    from chaos_trader.mcp_server import serve
+    serve(home)
+    return 0
+
+
 def _runnable() -> dict[str, dict[str, Path]]:
     """Every script `chaos run` accepts, by source in search order. Test modules and __init__ are not scripts."""
     from chaos_trader.skills_install import SOURCE
@@ -198,6 +217,8 @@ def main(argv: list[str] | None = None) -> int:
         return _skills(argv[1:])
     if argv[0] == "run":
         return _run_script(argv[1:])
+    if argv[0] == "mcp":
+        return _mcp(argv[1:])
     return _run_pipeline(argv)
 
 

@@ -658,6 +658,9 @@ def cmd_wallets(args: argparse.Namespace) -> None:
     if getattr(args, "review", False):
         cmd_wallets_review(args)
         return
+    if getattr(args, "list", False):
+        cmd_wallets_list(args)
+        return
     from smart_wallet_promoter import DEFAULT_DB as SMART_DB
     from smart_wallet_promoter import run as promoter_run
     db = Path(args.db).expanduser() if getattr(args, "db", None) else SMART_DB
@@ -729,6 +732,29 @@ def cmd_wallets(args: argparse.Namespace) -> None:
     if enrich_failures:
         # Card is printed either way; the exit code keeps cron/health truthful.
         raise SystemExit(1)
+
+
+def cmd_wallets_list(args: argparse.Namespace) -> None:
+    """`chaos wallets --list`: the home roster as the file holds it. Reads that file only."""
+    path = PROFILE_HOME / "trading" / "config" / "roster.json"
+    if not path.is_file():
+        raise SystemExit(f"No roster at {path}. Run chaos onboard first.")
+    roster = json.loads(path.read_text(encoding="utf-8"))
+    data = {key: roster.get(key) for key in ("version", "captured_at", "source")}
+    data["wallets"] = roster["wallets"]
+    if getattr(args, "json", False):
+        print_envelope("wallets --list", data)
+        return
+    if getattr(args, "raw", False):
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return
+    lines = [f"{w.get('tier') or '?'} {w.get('address')}" for w in data["wallets"]]
+    lines.append(f"{len(data['wallets'])} wallets in the roster ({data['version']}, source {data['source']})")
+    text = "\n".join(lines)
+    if args.render_json:
+        print(json.dumps({"text": _descriptor_text(text), "format": "plain", "link_preview": {"disabled": True}, "buttons": [], "artifacts": []}, ensure_ascii=False))
+    else:
+        print(text)
 
 
 def cmd_wallets_edit(args: argparse.Namespace) -> None:
@@ -982,9 +1008,10 @@ def main() -> None:
     prp.add_argument("--timeout", type=int, default=120)
     prp.set_defaults(func=cmd_paper_report)
 
-    wp = sub.add_parser("wallets", help="Smart-wallet discovery status; --discover N enriches never-scored edge-wallets; --review checks the roster; --add/--remove edit it")
+    wp = sub.add_parser("wallets", help="Smart-wallet discovery status; --discover N enriches never-scored edge-wallets; --list prints the roster; --review checks it; --add/--remove edit it")
     wmode = wp.add_mutually_exclusive_group()
     wmode.add_argument("--discover", type=int, default=0, help="Enrich up to N never-scored wallets found via funding/transfer edges (Helius reads)")
+    wmode.add_argument("--list", action="store_true", help="The home roster: one tier and address per line, from the roster file only")
     wmode.add_argument("--review", action="store_true", help="Each roster wallet's last event and track record from the local database")
     wmode.add_argument("--add", metavar="ADDRESS", default=None, help="Add a wallet to the home roster; needs --tier")
     wmode.add_argument("--remove", metavar="ADDRESS", default=None, help="Drop a wallet from the home roster")
@@ -1011,11 +1038,13 @@ Commands, run as `chaos <command>`:
 - smart-signals                 (smart-money cluster evidence; --wallets lists the tracked wallets)
 - wallets                       (smart-wallet discovery status + queue)
 - wallets --discover 5          (enrich up to 5 never-scored edge-wallets, then re-rank)
+- wallets --list                (the home roster: one tier and address per line; reads the roster file only)
 - wallets --review              (each roster wallet's last activity and track record; --days 14 sets the dormant window)
 - wallets --add <address> --tier A|B|C  (add a wallet to the home roster; no chain call)
 - wallets --remove <address>    (drop a wallet from the home roster)
 - skills list | install --for claude|codex|hermes|all  (shipped agent skills; `chaos skills install --dry-run` writes nothing)
 - run <script> [args]           (run a pipeline script, job, or skill helper by name; `chaos run` alone lists them)
+- mcp                           (read-only MCP server on stdio with seven tools over these commands; needs the mcp extra)
 - --version                     (print the package version)
 - help                          (this list)
 
