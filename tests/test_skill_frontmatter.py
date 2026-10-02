@@ -87,7 +87,7 @@ def frontmatter(text: str) -> dict:
 class SkillFrontmatterTests(unittest.TestCase):
     def skill_files(self) -> list[Path]:
         files = sorted(SKILLS.glob("*/SKILL.md"))
-        self.assertEqual(len(files), 12)
+        self.assertEqual(len(files), 14)
         return files
 
     def test_frontmatter_starts_on_line_one(self):

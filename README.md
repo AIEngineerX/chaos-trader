@@ -47,7 +47,7 @@ On Windows the `chaos` console script lands in the user Scripts folder, which ma
 
 ## Install for Hermes
 
-The repository is also a Hermes profile. Installing it as one gives you `SOUL.md`, a `config.yaml` with a model block, the 12 skills, and three cron jobs. It needs Hermes 0.21.0 or later.
+The repository is also a Hermes profile. Installing it as one gives you `SOUL.md`, a `config.yaml` with a model block, the 14 skills, and three cron jobs. It needs Hermes 0.21.0 or later.
 
     hermes profile install github.com/AIEngineerX/chaos-trader --alias
 
@@ -213,6 +213,8 @@ Each folder under `skills/blockchain/` in the repo is one `SKILL.md` an agent ca
 | `chaos-trade-journal` | Paper outcomes and the learning report; guidance, no command |
 | `chaos-execution-control` | The boundary: what the agent may and may not do |
 | `gmgn-alpha-intelligence` | Optional cross-check against GMGN labels |
+| `wallet-watchlist-imports` | Turning wallet lists into import files; guidance plus a validator; feeds `chaos wallets --add` |
+| `chaos-evm-intelligence` | Reading EVM wallets, tokens, and contracts by hand; guidance, no command; Solana is the only chain the pipeline reads |
 
 Install them for every supported agent in one command:
 

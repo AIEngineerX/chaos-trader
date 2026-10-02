@@ -2,6 +2,10 @@
 
 All notable changes to this package. Dates are UTC.
 
+## Unreleased
+
+- Two more skills: wallet watchlist imports with a validator (`chaos run validate_wallet_import`), and EVM read guidance (the pipeline stays Solana-only).
+
 ## 0.1.0 — 2026-10-02 (initial public release)
 
 - Releases go to PyPI as `chaos-trader` through trusted publishing: a `vX.Y.Z` tag runs `.github/workflows/publish.yml`, which refuses a tag that differs from the package version, builds the wheel and sdist, and uploads them with no stored token.

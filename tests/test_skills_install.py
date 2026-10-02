@@ -1,4 +1,4 @@
-"""`chaos skills install` puts the 12 skills where Claude Code, Codex, and Hermes look for them."""
+"""`chaos skills install` puts the 14 skills where Claude Code, Codex, and Hermes look for them."""
 import contextlib
 import io
 import os
@@ -128,8 +128,8 @@ class SkillsInstallTests(unittest.TestCase):
             self.assertIn(skipped_line(foreign), out)
             self.assertEqual(tree(home), [".claude", ".claude/skills", ".claude/skills/solana"])
 
-    def test_twelve_skills_ship(self):
-        self.assertEqual(len(NAMES), 12)
+    def test_fourteen_skills_ship(self):
+        self.assertEqual(len(NAMES), 14)
 
     def test_all_with_hermes_home_writes_three_trees(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -139,8 +139,8 @@ class SkillsInstallTests(unittest.TestCase):
             self.assert_skill_tree(home / ".claude" / "skills")
             self.assert_skill_tree(home / ".agents" / "skills")
             self.assert_skill_tree(home / ".hermes" / "skills" / "blockchain")
-            self.assertEqual(len(paths), 36)
-            self.assertEqual(len(set(paths)), 36)
+            self.assertEqual(len(paths), 42)
+            self.assertEqual(len(set(paths)), 42)
             for p in paths:
                 self.assertIn(str(p), out)
             self.assertNotIn("external_dirs", out)
@@ -159,8 +159,8 @@ class SkillsInstallTests(unittest.TestCase):
             home = Path(tmp)
             paths, out = self.install({"all"}, project=False, dry_run=False, home=home)
             self.assertIn(SNIPPET, out)
-            self.assertEqual(len(paths), 24)
-            self.assertEqual(len(set(paths)), 24)
+            self.assertEqual(len(paths), 28)
+            self.assertEqual(len(set(paths)), 28)
 
     def test_project_writes_under_cwd(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -182,7 +182,7 @@ class SkillsInstallTests(unittest.TestCase):
             home = Path(tmp)
             (home / ".hermes").mkdir()
             paths, out = self.install({"all"}, project=False, dry_run=True, home=home)
-            self.assertEqual(len(paths), 36)
+            self.assertEqual(len(paths), 42)
             for p in paths:
                 self.assertIn(str(p), out)
             self.assertEqual(tree(home), [".hermes"])
@@ -198,14 +198,14 @@ class SkillsInstallTests(unittest.TestCase):
         manifest = Path(__file__).resolve().parents[1] / "MANIFEST.in"
         self.assertIn("graft skills", manifest.read_text(encoding="utf-8").splitlines())
 
-    def test_list_prints_12_lines_without_a_package_copy(self):
+    def test_list_prints_14_lines_without_a_package_copy(self):
         package_copy = Path(skills_install.__file__).resolve().parent / "skills"
         if package_copy.exists():
             self.skipTest("a build left chaos_trader/skills on disk")
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             skills_install.list_skills()
-        self.assertEqual(len(out.getvalue().splitlines()), 12)
+        self.assertEqual(len(out.getvalue().splitlines()), 14)
         self.assertEqual(skills_install.SOURCE, SKILLS)
 
 
@@ -250,7 +250,7 @@ class SkillsCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             p = self.run_cli("list", home=Path(tmp))
             self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
-            self.assertEqual(len([line for line in p.stdout.splitlines() if line.strip()]), 12)
+            self.assertEqual(len([line for line in p.stdout.splitlines() if line.strip()]), 14)
 
     def test_install_requires_a_target(self):
         with tempfile.TemporaryDirectory() as tmp:

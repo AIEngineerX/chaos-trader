@@ -43,7 +43,7 @@ jobs:
         run: python -m pip install build && python -m build
       - name: Wheel carries the seed, the skills, the schema, and NOTICE
         run: |
-          python -c "import glob, zipfile; names = set(zipfile.ZipFile(glob.glob('dist/*.whl')[0]).namelist()); need = ['chaos_trader/seed/roster.json', 'chaos_trader/skills/blockchain/solana/SKILL.md', 'chaos_trader/skills/blockchain/chaos-solana-intelligence/SKILL.md', 'chaos_trader/trading/schemas/smart_wallets_schema.sql']; missing = [n for n in need if n not in names]; assert not missing, missing; assert len([n for n in names if n.startswith('chaos_trader/skills/blockchain/') and n.endswith('/SKILL.md') and n.count('/') == 4]) == 12, 'expected 12 skills in wheel'; assert any('.dist-info/' in n and n.endswith('/NOTICE') for n in names), 'NOTICE missing from wheel'; print('wheel ok')"
+          python -c "import glob, zipfile; names = set(zipfile.ZipFile(glob.glob('dist/*.whl')[0]).namelist()); need = ['chaos_trader/seed/roster.json', 'chaos_trader/skills/blockchain/solana/SKILL.md', 'chaos_trader/skills/blockchain/chaos-solana-intelligence/SKILL.md', 'chaos_trader/trading/schemas/smart_wallets_schema.sql']; missing = [n for n in need if n not in names]; assert not missing, missing; assert len([n for n in names if n.startswith('chaos_trader/skills/blockchain/') and n.endswith('/SKILL.md') and n.count('/') == 4]) == 14, 'expected 14 skills in wheel'; assert any('.dist-info/' in n and n.endswith('/NOTICE') for n in names), 'NOTICE missing from wheel'; print('wheel ok')"
       # pip-audit cannot read a wheel file, so the wheel's own Requires-Dist lines become the requirements it audits.
       - name: Audit the wheel's dependencies
         run: |
