@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-from chaos_home import REFILL_PAPER_BOOK, chaos_home, unreadable_db  # noqa: E402
+from chaos_home import REFILL_PAPER_BOOK, REFILL_WALLETS, chaos_home, db_failure, unreadable_db  # noqa: E402
 PROFILE_HOME = chaos_home()
 CONFIG_PATH = PROFILE_HOME / "trading" / "config" / "paper_autopilot.yaml"
 DEFAULT_DB = PROFILE_HOME / "trading" / "db" / "paper_autopilot.sqlite"
@@ -1770,14 +1770,17 @@ def main() -> None:
 
     cfg = RunnerConfig.from_file(Path(args.config).expanduser())
     runner = PaperAutopilotRunner(cfg)
-    if args.status:
-        out = runner.status()
-    elif args.once:
-        out = runner.run_once(limit=args.limit, analyze_top=max(0, args.analyze_top), with_x=bool(args.with_x))
-    elif args.max_cycles:
-        out = runner.run_loop(max_cycles=max(1, args.max_cycles), analyze_top=max(0, args.analyze_top), with_x=bool(args.with_x))
-    else:
-        raise SystemExit("Choose --status, --once, or --max-cycles. Continuous loop is not started by default.")
+    try:
+        if args.status:
+            out = runner.status()
+        elif args.once:
+            out = runner.run_once(limit=args.limit, analyze_top=max(0, args.analyze_top), with_x=bool(args.with_x))
+        elif args.max_cycles:
+            out = runner.run_loop(max_cycles=max(1, args.max_cycles), analyze_top=max(0, args.analyze_top), with_x=bool(args.with_x))
+        else:
+            raise SystemExit("Choose --status, --once, or --max-cycles. Continuous loop is not started by default.")
+    except sqlite3.DatabaseError as exc:  # wherever this platform's SQLite first notices the damage
+        raise SystemExit(db_failure(exc, [(runner.db_path, REFILL_PAPER_BOOK), (DEFAULT_SMART_WALLET_DB, REFILL_WALLETS)]))
     print(json.dumps(out, indent=2, sort_keys=True, ensure_ascii=False, default=str) if args.raw else compact(out))
     raise SystemExit(1 if any(d.get("decision") == "error" for d in out.get("decisions") or []) else 0)
 

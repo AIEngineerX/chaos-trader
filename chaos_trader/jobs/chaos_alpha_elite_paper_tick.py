@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -60,30 +61,34 @@ def run_cycle_once(profile: Path) -> int:
         print(consumer.NO_INGEST)
         return 0
     started = consumer.now_utc()
-    con = consumer.connect(profile / "trading" / "db" / "alpha_elite_paper.sqlite")
-    evidence = None
+    paper_path = profile / "trading" / "db" / "alpha_elite_paper.sqlite"
     try:
-        roster = consumer.load_roster(consumer.DEFAULT_ROSTER)
-        evidence = consumer.connect_evidence(evidence_path)
-        result = consumer.run_cycle(
-            con,
-            evidence,
-            roster,
-            checked_at=started,
-            from_event_id=None,
-            limit=5,
-        )
-        result["receipt_path"] = consumer.save_receipt(
-            con,
-            profile / "trading" / "reports" / "alpha_elite_paper",
-            "cycle",
-            started,
-            result,
-        )
-    finally:
-        if evidence is not None:
-            evidence.close()
-        con.close()
+        con = consumer.connect(paper_path)
+        evidence = None
+        try:
+            roster = consumer.load_roster(consumer.DEFAULT_ROSTER)
+            evidence = consumer.connect_evidence(evidence_path)
+            result = consumer.run_cycle(
+                con,
+                evidence,
+                roster,
+                checked_at=started,
+                from_event_id=None,
+                limit=5,
+            )
+            result["receipt_path"] = consumer.save_receipt(
+                con,
+                profile / "trading" / "reports" / "alpha_elite_paper",
+                "cycle",
+                started,
+                result,
+            )
+        finally:
+            if evidence is not None:
+                evidence.close()
+            con.close()
+    except sqlite3.DatabaseError as exc:  # wherever this platform's SQLite first notices the damage
+        raise SystemExit(consumer.db_failure(exc, [(paper_path, consumer.REFILL_PAPER_BOOK), (evidence_path, consumer.REFILL_WALLETS)]))
     print(consumer.compact(result, "cycle"))
     return 0 if result.get("ok") else 2
 

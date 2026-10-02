@@ -29,7 +29,7 @@ from strategy_paper_engine import render as render_strategy_paper
 import x_provider
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-from chaos_home import REFILL_PAPER_BOOK, chaos_home, stop_if_corrupt, unreadable_db  # noqa: E402
+from chaos_home import REFILL_PAPER_BOOK, REFILL_WALLETS, chaos_home, db_failure, stop_if_corrupt, unreadable_db  # noqa: E402
 PROFILE_HOME = chaos_home()
 PY = os.environ.get("CHAOS_PYTHON", sys.executable)
 MINT_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,88}$")
@@ -984,7 +984,13 @@ Advisory + paper only. No wallet, signing, routing, or live execution.""".strip(
     args = p.parse_args(argv)
     if args.cmd == "wallets" and bool(args.add) != bool(args.tier):
         wp.error("--add needs --tier A, B, or C" if args.add else "--tier goes with --add")
-    args.func(args)
+    try:
+        args.func(args)
+    except sqlite3.DatabaseError as exc:  # wherever this platform's SQLite first notices the damage
+        from paper_learning_report import PAPER_DB
+        from smart_wallet_promoter import DEFAULT_DB as SMART_DB
+        smart_db = Path(args.db).expanduser() if getattr(args, "db", None) else SMART_DB
+        raise SystemExit(db_failure(exc, [(smart_db, REFILL_WALLETS), (PAPER_DB, REFILL_PAPER_BOOK)]))
 
 
 if __name__ == "__main__":

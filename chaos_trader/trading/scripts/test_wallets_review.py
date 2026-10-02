@@ -17,6 +17,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR / "fixtures") not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR / "fixtures"))
+from damaged_sqlite import damage_table, junk_with_header  # noqa: E402
+
 SCHEMA = SCRIPT_DIR.parent / "schemas" / "smart_wallets_schema.sql"
 BOUNDARY = "Advisory + paper only. No wallet, signing, routing, or live execution."
 NO_INGEST = "No ingest yet. Run chaos run chaos_alpha_elite_ingest first."
@@ -137,13 +141,16 @@ class WalletsReviewTests(unittest.TestCase):
     def test_corrupt_database_exits_1_with_one_line_on_every_wallets_read(self):
         # A junk file fails on the header ("file is not a database"); a damaged first page fails on the
         # schema ("database disk image is malformed"). Both are corruption, so both say to move it aside.
+        # Junk behind a valid header is the shape some SQLite builds open before failing.
         move_aside = "smart_wallets.sqlite is not a readable SQLite database. Move it aside and run the ingest again."
-        for damage in ("junk", "malformed"):
+        self.db.parent.mkdir(parents=True, exist_ok=True)
+        for damage in ("junk", "junk behind a header", "malformed"):
+            self.db.unlink(missing_ok=True)
             if damage == "junk":
-                self.db.parent.mkdir(parents=True, exist_ok=True)
                 self.db.write_bytes(bytes(range(256)) * 24)
+            elif damage == "junk behind a header":
+                junk_with_header(self.db)
             else:
-                self.db.unlink()
                 self.build_db()
                 data = bytearray(self.db.read_bytes())
                 data[100:4096] = b"\xff" * (4096 - 100)
@@ -151,6 +158,14 @@ class WalletsReviewTests(unittest.TestCase):
             for args in (("--review",), ("--review", "--raw"), ("--discover", "1"), ()):
                 with self.subTest(damage=damage, args=args):
                     self.assertTrue(self.run_wallets_failing(*args).endswith(move_aside))
+        # An intact first page over a damaged events table opens on every platform; the review fails only
+        # when it reads each wallet's newest event.
+        self.db.unlink()
+        self.build_db()
+        damage_table(self.db, "wallet_token_events")
+        for args in (("--review",), ("--review", "--raw")):
+            with self.subTest(damage="damaged events table", args=args):
+                self.assertTrue(self.run_wallets_failing(*args).endswith(move_aside))
 
     def test_locked_database_shows_the_error_and_says_to_try_again(self):
         # A lock is not damage: moving the file aside would throw away a good database.

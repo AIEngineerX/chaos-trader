@@ -6,15 +6,18 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
+for _path in (SCRIPT_DIR, SCRIPT_DIR / "fixtures"):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
 
 import elite_paper_cohort as paper  # noqa: E402
+from damaged_sqlite import damage_table, junk_with_header  # noqa: E402
 
 WALLET_A = "A" * 31 + "B"
 WALLET_B = "A" * 31 + "C"
@@ -450,20 +453,35 @@ class ElitePaperCohortTests(unittest.TestCase):
             env = {k: v for k, v in os.environ.items() if k not in ("CHAOS_PROFILE_HOME", "HERMES_HOME")}
             env.update(CHAOS_HOME=str(home), PYTHONIOENCODING="utf-8")
             evidence = home / "smart_wallets.sqlite"
-            evidence.write_bytes(bytes(range(256)) * 24)
-            for command in ("cycle", "observe"):
-                with self.subTest(command=command):
-                    p = subprocess.run(
-                        [sys.executable, str(SCRIPT_DIR / "elite_paper_cohort.py"), command,
-                         "--db", str(home / "paper.sqlite"), "--evidence-db", str(evidence)],
-                        capture_output=True, text=True, encoding="utf-8", env=env, timeout=120, check=False,
-                    )
-                    self.assertEqual(1, p.returncode, p.stdout + p.stderr)
-                    self.assertEqual("", p.stdout)
-                    self.assertEqual(
-                        f"{evidence} is not a readable SQLite database. Move it aside and run the ingest again.",
-                        p.stderr.strip(),
-                    )
+
+            def damaged_events() -> None:
+                with closing(sqlite3.connect(evidence)) as con:
+                    con.executescript((SCRIPT_DIR.parent / "schemas" / "smart_wallets_schema.sql").read_text(encoding="utf-8"))
+                damage_table(evidence, "wallet_token_events")
+
+            # Plain junk, junk behind a valid header, and an intact first page over a damaged events table,
+            # which opens on every platform and fails only when the cycle reads buys.
+            shapes = {
+                "junk": lambda: evidence.write_bytes(bytes(range(256)) * 24),
+                "junk behind a header": lambda: junk_with_header(evidence),
+                "damaged events table": damaged_events,
+            }
+            for shape, make in shapes.items():
+                evidence.unlink(missing_ok=True)
+                make()
+                for command in ("cycle", "observe"):
+                    with self.subTest(shape=shape, command=command):
+                        p = subprocess.run(
+                            [sys.executable, str(SCRIPT_DIR / "elite_paper_cohort.py"), command,
+                             "--db", str(home / "paper.sqlite"), "--evidence-db", str(evidence)],
+                            capture_output=True, text=True, encoding="utf-8", env=env, timeout=120, check=False,
+                        )
+                        self.assertEqual(1, p.returncode, p.stdout + p.stderr)
+                        self.assertEqual("", p.stdout)
+                        self.assertEqual(
+                            f"{evidence} is not a readable SQLite database. Move it aside and run the ingest again.",
+                            p.stderr.strip(),
+                        )
 
 
 def tearDownModule() -> None:

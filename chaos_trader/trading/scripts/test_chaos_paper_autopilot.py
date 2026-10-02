@@ -3,20 +3,24 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import closing, redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
+for _path in (SCRIPT_DIR, SCRIPT_DIR / "fixtures"):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
 
 import chaos_paper_autopilot
+from damaged_sqlite import damage_table, junk_with_header
 from chaos_paper_autopilot import PaperAutopilotRunner, RunnerConfig, coerce_flag, today_utc
 from paper_autopilot_config_check import load_config, validate
 from alpha_tape import EXCLUDED_SWEEP_MINTS
@@ -1489,6 +1493,48 @@ class PaperAutopilotErrorSurfaceTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("Decisions: 1", card.splitlines())
         self.assertIn("Errors: 0", card.splitlines())
+
+
+class CorruptPaperBookTests(unittest.TestCase):
+    """The autopilot CLI on a damaged paper book, as a real subprocess with a real config; market discovery is
+    off and the temp home has no wallet tape, so nothing leaves the process."""
+
+    def test_a_damaged_book_exits_1_with_one_line(self):
+        # Plain junk, junk behind a valid header, and an intact first page over a damaged candidates table,
+        # which opens on every platform and fails only when the run reads or writes candidates.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            book = root / "paper.sqlite"
+            cfg = config_for(root)
+            cfg.raw["boundary"].update(no_swap_links=True, no_live_alerts=True)  # main() loads through the validator
+            config_path = root / "paper_autopilot.yaml"
+            config_path.write_text(json.dumps(cfg.raw), encoding="utf-8")
+            env = {k: v for k, v in os.environ.items() if k not in ("CHAOS_PROFILE_HOME", "HERMES_HOME")}
+            env.update(CHAOS_HOME=str(root / "home"), PYTHONIOENCODING="utf-8")
+
+            def damaged_candidates() -> None:
+                with closing(sqlite3.connect(book)) as con:
+                    con.executescript(chaos_paper_autopilot.SCHEMA)
+                damage_table(book, "candidates")
+
+            shapes = {
+                "junk": lambda: book.write_bytes(bytes(range(256)) * 24),
+                "junk behind a header": lambda: junk_with_header(book),
+                "damaged candidates table": damaged_candidates,
+            }
+            line = f"{book} is not a readable SQLite database. Move it aside and the next paper tick starts a new book."
+            for shape, make in shapes.items():
+                for mode in (("--status",), ("--once", "--limit", "1")):
+                    with self.subTest(shape=shape, mode=mode[0]):
+                        book.unlink(missing_ok=True)
+                        make()
+                        p = subprocess.run(
+                            [sys.executable, str(SCRIPT_DIR / "chaos_paper_autopilot.py"), "--config", str(config_path), *mode],
+                            capture_output=True, text=True, encoding="utf-8", env=env, timeout=120, check=False,
+                        )
+                        self.assertEqual(1, p.returncode, p.stdout + p.stderr)
+                        self.assertEqual("", p.stdout)
+                        self.assertEqual(line, p.stderr.strip())
 
 
 if __name__ == "__main__":

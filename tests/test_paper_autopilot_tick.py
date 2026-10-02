@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import itertools
 import os
 import subprocess
 import sys
@@ -13,6 +14,9 @@ from unittest.mock import patch
 from chaos_trader.onboard import onboard
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT / "chaos_trader" / "trading" / "scripts" / "fixtures") not in sys.path:
+    sys.path.insert(0, str(ROOT / "chaos_trader" / "trading" / "scripts" / "fixtures"))
+from damaged_sqlite import junk_with_header  # noqa: E402
 SCRIPT = ROOT / "chaos_trader" / "jobs" / "chaos_paper_autopilot_tick.py"
 SPEC = importlib.util.spec_from_file_location("chaos_paper_autopilot_tick", SCRIPT)
 assert SPEC and SPEC.loader
@@ -66,11 +70,13 @@ class PaperAutopilotTickTests(unittest.TestCase):
             ("smart_wallets.sqlite", "run the ingest again"),
             ("paper_autopilot.sqlite", "the next paper tick starts a new book"),
         )
-        for name, refill in cases:
-            with self.subTest(database=name), tempfile.TemporaryDirectory() as td:
+        # Plain junk, and junk behind a valid header, which some SQLite builds open before failing.
+        shapes = {"junk": lambda db: db.write_bytes(bytes(range(256)) * 24), "junk behind a header": junk_with_header}
+        for (name, refill), (shape, make) in itertools.product(cases, shapes.items()):
+            with self.subTest(database=name, shape=shape), tempfile.TemporaryDirectory() as td:
                 home = onboard(Path(td) / "home", rpc_url=None, helius_key=None)
                 db = home / "trading" / "db" / name
-                db.write_bytes(bytes(range(256)) * 24)
+                make(db)
                 env = {k: v for k, v in os.environ.items() if k not in ("CHAOS_PROFILE_HOME", "HERMES_HOME")}
                 env.update(CHAOS_HOME=str(home), PYTHONIOENCODING="utf-8")
                 p = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True, encoding="utf-8",

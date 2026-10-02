@@ -16,6 +16,10 @@ from chaos_trader.onboard import onboard
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "chaos_trader" / "trading" / "scripts"
+if str(SCRIPTS / "fixtures") not in sys.path:
+    sys.path.insert(0, str(SCRIPTS / "fixtures"))
+from damaged_sqlite import damage_table, junk_with_header  # noqa: E402
+
 NO_INGEST = "No ingest yet. Run chaos run chaos_alpha_elite_ingest first."
 SCRIPT = ROOT / "chaos_trader" / "jobs" / "chaos_alpha_elite_paper_tick.py"
 SPEC = importlib.util.spec_from_file_location("chaos_alpha_elite_paper_tick", SCRIPT)
@@ -78,14 +82,31 @@ class RealCycleTests(unittest.TestCase):
         self.assertFalse((self.home / "trading" / "reports" / "alpha_elite_paper").exists())
 
     def test_corrupt_evidence_database_exits_1_with_one_line(self) -> None:
-        (self.db_dir / "smart_wallets.sqlite").write_bytes(bytes(range(256)) * 24)
-        with self.assertRaises(SystemExit) as raised:
-            self.run_cycle()
-        self.assertEqual(
-            f"{self.db_dir / 'smart_wallets.sqlite'} is not a readable SQLite database. Move it aside and run the ingest again.",
-            raised.exception.code,
-        )
-        self.assertFalse((self.home / "trading" / "reports" / "alpha_elite_paper").exists())
+        evidence = self.db_dir / "smart_wallets.sqlite"
+
+        def damaged_events() -> None:
+            with closing(sqlite3.connect(evidence)) as con:
+                con.executescript((self.db_dir / "smart_wallets_schema.sql").read_text(encoding="utf-8"))
+            damage_table(evidence, "wallet_token_events")
+
+        # Plain junk, junk behind a valid header, and an intact first page over a damaged events table,
+        # which opens on every platform and fails only when the cycle reads buys.
+        shapes = {
+            "junk": lambda: evidence.write_bytes(bytes(range(256)) * 24),
+            "junk behind a header": lambda: junk_with_header(evidence),
+            "damaged events table": damaged_events,
+        }
+        for shape, make in shapes.items():
+            with self.subTest(shape=shape):
+                evidence.unlink(missing_ok=True)
+                make()
+                with self.assertRaises(SystemExit) as raised:
+                    self.run_cycle()
+                self.assertEqual(
+                    f"{evidence} is not a readable SQLite database. Move it aside and run the ingest again.",
+                    raised.exception.code,
+                )
+                self.assertFalse((self.home / "trading" / "reports" / "alpha_elite_paper").exists())
 
     def test_cycle_on_a_schema_built_database_writes_a_receipt(self) -> None:
         with closing(sqlite3.connect(self.db_dir / "smart_wallets.sqlite")) as con:

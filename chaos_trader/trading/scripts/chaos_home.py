@@ -39,27 +39,48 @@ REFILL_WALLETS = "run the ingest again"
 REFILL_PAPER_BOOK = "the next paper tick starts a new book"
 
 
+def corrupt_line(path: Path, refill: str = REFILL_WALLETS) -> str:
+    return f"{path} is not a readable SQLite database. Move it aside and {refill}."
+
+
 def unreadable_db(path: Path, exc: sqlite3.DatabaseError, refill: str = REFILL_WALLETS) -> str:
     """One line for a SQLite file a command could not read. Only a corrupt file is worth moving aside, and
     `refill` says what rebuilds it; a lock or a permission error passes, so it says to try again and shows
     SQLite's own words."""
     if corrupt_db(exc):
-        return f"{path} is not a readable SQLite database. Move it aside and {refill}."
+        return corrupt_line(path, refill)
     return f"Could not read {path}: {exc}. Try again; if it keeps failing, check that the file is readable and no other process holds it."
+
+
+def intact(path: Path) -> bool:
+    """False only when SQLite's quick_check finds the file damaged, on any page. A missing, locked, or
+    unreadable-for-now file counts as intact: that is not damage. Where SQLite first notices damage
+    differs by platform and version, so this reads every page instead of trusting the first query."""
+    if not path.exists():
+        return True
+    try:
+        with closing(sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=2)) as con:
+            row = con.execute("PRAGMA quick_check(1)").fetchone()
+    except sqlite3.DatabaseError as exc:
+        return not corrupt_db(exc)
+    return row is not None and row[0] == "ok"
 
 
 def stop_if_corrupt(path: Path, refill: str = REFILL_WALLETS) -> None:
     """For readers that treat a file they cannot open as absent: a corrupt file stops the command here
     with one line instead. A missing, locked, or unreadable-for-now file passes, so the caller's
     nothing-yet path still runs."""
-    if not path.exists():
-        return
-    try:
-        with closing(sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=2)) as con:
-            con.execute("SELECT count(*) FROM sqlite_master").fetchone()
-    except sqlite3.DatabaseError as exc:
-        if corrupt_db(exc):
-            raise SystemExit(unreadable_db(path, exc, refill))
+    if not intact(path):
+        raise SystemExit(corrupt_line(path, refill))
+
+
+def db_failure(exc: sqlite3.DatabaseError, candidates: list[tuple[Path, str]]) -> str:
+    """The one line for a top-level catch, where the failing file is not known: it names the first
+    candidate (path, refill) that is damaged; with none damaged, SQLite's own words and a retry."""
+    for path, refill in candidates:
+        if not intact(path):
+            return corrupt_line(path, refill)
+    return f"A database read failed: {exc}. Try again; if it keeps failing, check that the files under trading/db are readable and no other process holds them."
 
 
 ensure_utf8_stdio()

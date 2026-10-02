@@ -30,7 +30,7 @@ from elite_wallet_pipeline import (  # noqa: E402
     load_roster,
 )
 
-from chaos_home import chaos_home, unreadable_db  # noqa: E402
+from chaos_home import REFILL_PAPER_BOOK, REFILL_WALLETS, chaos_home, db_failure, unreadable_db  # noqa: E402
 PROFILE_HOME = chaos_home()
 DEFAULT_DB = PROFILE_HOME / "trading" / "db" / "alpha_elite_paper.sqlite"
 DEFAULT_REPORT_DIR = PROFILE_HOME / "trading" / "reports" / "alpha_elite_paper"
@@ -557,6 +557,15 @@ def main() -> int:
     if args.command in {"cycle","observe"} and not args.evidence_db.exists():
         print(NO_INGEST)
         return 0
+    try:
+        result=run_command(args)
+    except sqlite3.DatabaseError as exc:  # wherever this platform's SQLite first notices the damage
+        raise SystemExit(db_failure(exc,[(args.db,REFILL_PAPER_BOOK),(args.evidence_db,REFILL_WALLETS)]))
+    print(json.dumps(result,indent=2,sort_keys=True,default=str) if args.raw else compact(result,args.command))
+    return 0 if result.get("ok") else 2
+
+
+def run_command(args: argparse.Namespace) -> dict[str,Any]:
     started=now_utc(); con=connect(args.db)
     evidence=None
     try:
@@ -575,8 +584,7 @@ def main() -> int:
     finally:
         if evidence is not None: evidence.close()
         con.close()
-    print(json.dumps(result,indent=2,sort_keys=True,default=str) if args.raw else compact(result,args.command))
-    return 0 if result.get("ok") else 2
+    return result
 
 
 if __name__=="__main__":

@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from chaos_home import REFILL_PAPER_BOOK, chaos_home, stop_if_corrupt  # noqa: E402
+from chaos_home import REFILL_PAPER_BOOK, chaos_home, stop_if_corrupt, unreadable_db  # noqa: E402
 from alpha_paper_trade import connect_ro  # noqa: E402
 PROFILE_HOME = chaos_home()
 PAPER_DB = PROFILE_HOME / "trading" / "db" / "paper_autopilot.sqlite"
@@ -35,6 +35,13 @@ def main() -> int:
     ap.add_argument("--db", default=str(PAPER_DB))
     ap.add_argument("--limit", type=int, default=250)
     args = ap.parse_args()
+    try:
+        return report(args)
+    except sqlite3.DatabaseError as exc:  # wherever this platform's SQLite first notices the damage
+        raise SystemExit(unreadable_db(Path(args.db), exc, REFILL_PAPER_BOOK))
+
+
+def report(args: argparse.Namespace) -> int:
     con = connect_ro(Path(args.db))
     if con is None:
         stop_if_corrupt(Path(args.db), REFILL_PAPER_BOOK)  # a corrupt book must not read as "no activity yet"
