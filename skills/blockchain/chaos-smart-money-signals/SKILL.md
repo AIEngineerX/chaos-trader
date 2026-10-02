@@ -16,7 +16,7 @@ Note: this skill needs an external signal API (`SMART_MONEY_API_BASE`); no publi
 
 ## Prerequisites
 
-- The package is installed: `pip install git+https://github.com/AIEngineerX/chaos-trader` (or it came with the Hermes profile).
+- The package is installed: `pip install chaos-trader` (or it came with the Hermes profile).
 - A home exists: `chaos onboard` was run once (`chaos onboard --yes` for the defaults).
 - `CHAOS_HOME` points at that home, or you are inside the Hermes profile, which sets it. Check with `chaos --version` and `chaos help`.
 

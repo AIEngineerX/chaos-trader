@@ -6,7 +6,7 @@ A trader-agent research stack for Solana: reads wallets, ranks tokens, runs pape
 
 ## 60-second path
 
-    pip install git+https://github.com/AIEngineerX/chaos-trader
+    pip install chaos-trader
     export CHAOS_HOME="$HOME/.chaos-trader"
     chaos onboard --yes
     chaos token So11111111111111111111111111111111111111112 --no-x
@@ -27,11 +27,11 @@ It does not sign, route, or send anything. There is no switch to turn that on.
 
 ## Install
 
-Install from GitHub:
+Install from PyPI:
 
-    pip install git+https://github.com/AIEngineerX/chaos-trader
+    pip install chaos-trader
 
-Releases are published to PyPI by the tag workflow; until the first tag, install from GitHub.
+Releases are published to PyPI by the tag workflow. To run the unreleased `main` branch instead: `pip install git+https://github.com/AIEngineerX/chaos-trader`.
 
 From source:
 
@@ -55,7 +55,7 @@ The installer shows the manifest and four optional variables: `SOLANA_RPC_URL`, 
 
 Then, once, install the package into the Python that Hermes runs on, and create the state folders in the profile:
 
-    <Hermes python> -m pip install git+https://github.com/AIEngineerX/chaos-trader
+    <Hermes python> -m pip install chaos-trader
     <Hermes python> -m chaos_trader.cli onboard --home <profile path> --yes
 
 On a git install of Hermes, its Python is in the `venv` folder of the install directory that `hermes --version` prints. `onboard --yes` writes `.env` with the public RPC URL; add `--rpc-url <url>` or `--helius-key <key>` to use your own. It creates `trading/` with the seed roster, the paper config, and the data folders, and leaves `SOUL.md`, `config.yaml`, `skills/`, and `cron/` as they are. After that the agent needs no extra setup: Hermes sets `HERMES_HOME` to the profile folder for the agent and every command it runs, and `chaos` uses it as its home. A `CHAOS_HOME` in the environment Hermes starts from would win over it, so leave that unset.
@@ -172,7 +172,7 @@ Set them in `CHAOS_HOME/.env`. `chaos onboard` writes that file once. To add or 
 
 The paper-trading rules are in `CHAOS_HOME/trading/config/paper_autopilot.yaml`. That file is yours: `chaos update` never overwrites it, and instead writes the package's current defaults beside it as `paper_autopilot.defaults.yaml` so you can diff the two. Besides that defaults file, `chaos update` only restores a missing wallet schema file or data folder. Code updates come from pip, and the command prints the line:
 
-    pip install -U git+https://github.com/AIEngineerX/chaos-trader
+    pip install -U chaos-trader
 
 The defaults and the reason for each are in `docs/why-these-defaults.md`.
 
@@ -235,7 +235,7 @@ Install them for every supported agent in one command:
 `chaos mcp` starts a stdio server named `chaos-trader` for any agent that speaks the Model Context Protocol (MCP). Each of its seven tools runs the same verb as the command line with `--json` and hands the agent that envelope, so the agent sees exactly what `chaos token --json` prints. The tools are `token_read`, `analyze_token`, `sweep`, `strategy_paper`, `wallets_review`, `paper_report`, and `roster_list`. No tool signs, sends, or edits the roster. The read tools write only what the same command-line verbs write under `CHAOS_HOME`: signal ledger rows, report files, the holder cache, and for `sweep` the fast-lane rows. Those ledger rows are reads that `chaos outcomes` later counts. Roster edits and the ingest stay on the command line on purpose. `token_read` and `analyze_token` take `with_x`, off by default; `sweep` and `strategy_paper` use X when a provider is configured, as the command line does. A malformed mint comes back as a tool error, and the server keeps running. The server needs an onboarded home and the `mcp` extra:
 
 ```bash
-pip install "chaos-trader[mcp] @ git+https://github.com/AIEngineerX/chaos-trader"
+pip install "chaos-trader[mcp]"
 ```
 
 A token read can take several minutes, so the Codex and ElizaOS entries raise their tool timeouts above the 620-second limit of `chaos analyze`. Where `chaos` is not on the agent's `PATH`, use `python` as the command with `-m chaos_trader.cli mcp` as the arguments.
@@ -347,7 +347,7 @@ Three cron jobs keep the data fresh. The ingest refreshes the stored events and 
 
 The seed roster is a starting set captured on the date in its `captured_at` field. It is not a recommendation.
 
-To go back to an earlier release, install it by its tag: `pip install git+https://github.com/AIEngineerX/chaos-trader@v<version>`. That does not touch `CHAOS_HOME`, so `.env`, the roster, and your paper config stay as they are.
+To go back to an earlier release, install it by its tag: `pip install chaos-trader==<version>`. That does not touch `CHAOS_HOME`, so `.env`, the roster, and your paper config stay as they are.
 
 ## Execution
 

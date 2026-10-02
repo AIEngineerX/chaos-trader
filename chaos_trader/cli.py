@@ -18,7 +18,7 @@ PACKAGE = Path(__file__).resolve().parent
 SCRIPTS = PACKAGE / "trading" / "scripts"
 JOBS = PACKAGE / "jobs"
 RUN_USAGE = "chaos run <script> [args]"
-MCP_EXTRA = 'chaos mcp needs the MCP extra: pip install "chaos-trader[mcp] @ git+https://github.com/AIEngineerX/chaos-trader"'
+MCP_EXTRA = 'chaos mcp needs the MCP extra: pip install "chaos-trader[mcp]"'
 
 USAGE = """chaos-trader
 
@@ -109,7 +109,7 @@ def _update(argv: list[str]) -> int:
     home = Path(a.home).expanduser() if a.home else chaos_home()
     done = onboard(home, rpc_url=None, helius_key=None, update=True)
     print(f"defaults refreshed in {done}")
-    print("code is updated with: pip install -U git+https://github.com/AIEngineerX/chaos-trader")
+    print("code is updated with: pip install -U chaos-trader")
     return 0
 
 

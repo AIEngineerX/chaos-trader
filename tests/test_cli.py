@@ -165,7 +165,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
             p = self.run_cli("update", "--home", str(home), home=home)
             self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
-            self.assertEqual(p.stdout.splitlines(), [f"defaults refreshed in {home.resolve()}", "code is updated with: pip install -U git+https://github.com/AIEngineerX/chaos-trader"])
+            self.assertEqual(p.stdout.splitlines(), [f"defaults refreshed in {home.resolve()}", "code is updated with: pip install -U chaos-trader"])
 
     def test_version(self):
         p = subprocess.run([sys.executable, "-m", "chaos_trader.cli", "--version"], capture_output=True, text=True)

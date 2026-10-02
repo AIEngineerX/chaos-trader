@@ -21,7 +21,7 @@ No API key needed. Uses only Python standard library (urllib, json, argparse).
 
 ## Prerequisites
 
-- The package is installed: `pip install git+https://github.com/AIEngineerX/chaos-trader` (or it came with the Hermes profile).
+- The package is installed: `pip install chaos-trader` (or it came with the Hermes profile).
 - A home exists: `chaos onboard` was run once (`chaos onboard --yes` for the defaults).
 - `CHAOS_HOME` points at that home, or you are inside the Hermes profile, which sets it. Check with `chaos --version` and `chaos help`.
 

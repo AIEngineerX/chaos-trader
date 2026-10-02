@@ -127,11 +127,17 @@ class ReadmeRuleTests(unittest.TestCase):
             self.assertNotIn(stale, self.text)
 
     def test_profile_name_and_install_lines(self):
-        # The profile is chaos-trader so an --alias wrapper cannot shadow the chaos command; the PyPI
-        # name is unclaimed, so every pip line installs from the repository.
+        # The profile is chaos-trader so an --alias wrapper cannot shadow the chaos command. Since 0.1.0 the
+        # package is on PyPI, so the install lines use the package name; one line keeps the git URL for the
+        # unreleased main branch, and the rollback line pins a version.
         self.assertIn("hermes -p chaos-trader cron resume", self.text)
-        for stale in ("hermes -p chaos ", "profile update chaos ", "pip install chaos-trader", "pip install -U chaos-trader"):
+        for stale in ("hermes -p chaos ", "profile update chaos ", "Install from GitHub", "until the first tag"):
             self.assertNotIn(stale, self.text)
+        self.assertIn("    pip install chaos-trader\n", self.text)
+        self.assertIn("    pip install -U chaos-trader\n", self.text)
+        self.assertIn('pip install "chaos-trader[mcp]"', self.text)
+        self.assertIn("pip install chaos-trader==<version>", self.text)
+        self.assertEqual(self.text.count("git+https://github.com/AIEngineerX/chaos-trader"), 1)
 
     def test_no_openclaw_claim(self):
         self.assertNotIn("openclaw", self.text.lower())

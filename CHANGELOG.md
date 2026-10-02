@@ -2,6 +2,10 @@
 
 All notable changes to this package. Dates are UTC.
 
+## Unreleased
+
+- Install lines in the README, the skills' Prerequisites block, `chaos update`, and the `chaos mcp` hint use the PyPI name (`pip install chaos-trader`, `chaos-trader[mcp]`, `chaos-trader==<version>` to roll back); the git URL remains for the unreleased `main` branch.
+
 ## 0.1.0 — 2026-10-02 (initial public release)
 
 - `chaos outcomes [label] [--window 24h] [--min-n N]` shows how past reads did at one horizon (15m, 1h, 4h, 24h, 3d, or 7d) per read label: median price change and the shares that went up, doubled, or fell 70% or more, plus the share caught for `avoid-entry` and `exit-liquidity-watch` (a fall of 70% or more, a pool under $1,000, or a pair gone). It counts the first read per mint and label per UTC day, only marks taken within 5 minutes of their horizon, and never reads of tokens your own wallets hold or unread sweep candidates. A label under 20 reads shows `<k> of 20 reads, not scored yet` and no rate; `--min-n` cannot go below 20. The card prints the late marks it left out and when the outcome tick last ran; `--json` wraps the same data in the envelope. The new `chaos_outcome_tick` job runs the tracker under a lock and stamps `trading/state/outcome_tick_last_run` after a clean run; the Hermes profile ships it paused as `chaos-outcome-tick`, every 5 minutes, because a mark counts only within 300 seconds of its horizon. The tick marks the reads nearest that cutoff first and reads each mint from DexScreener once per tick (a 60-second cache). When the first read of a mint and label on a UTC day was marked late or missing, that day is not scored for them; a later read does not stand in. Labels beyond the six share one `OTHER` line, so the card fits one Telegram message. A tick that finds the lock held prints one line saying it skipped.

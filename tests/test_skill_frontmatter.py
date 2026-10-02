@@ -32,7 +32,7 @@ RESIDUE_DIGESTS = {
 WORD = re.compile(r"[a-z0-9]+")
 PREREQUISITES = (
     "## Prerequisites\n\n"
-    "- The package is installed: `pip install git+https://github.com/AIEngineerX/chaos-trader`"
+    "- The package is installed: `pip install chaos-trader`"
     " (or it came with the Hermes profile).\n"
     "- A home exists: `chaos onboard` was run once (`chaos onboard --yes` for the defaults).\n"
     "- `CHAOS_HOME` points at that home, or you are inside the Hermes profile, which sets it."

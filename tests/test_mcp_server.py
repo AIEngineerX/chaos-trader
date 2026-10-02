@@ -17,7 +17,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_RPC = "https://api.mainnet-beta.solana.com"
 TOOLS = ["analyze_token", "paper_report", "roster_list", "strategy_paper", "sweep", "token_read", "wallets_review"]
-MCP_EXTRA = 'chaos mcp needs the MCP extra: pip install "chaos-trader[mcp] @ git+https://github.com/AIEngineerX/chaos-trader"'
+MCP_EXTRA = 'chaos mcp needs the MCP extra: pip install "chaos-trader[mcp]"'
 NO_INGEST_REVIEW = "No ingest yet. Run chaos run chaos_alpha_elite_ingest first."
 NOT_A_MINT = "not a Solana mint address"
 SEED = json.loads((ROOT / "chaos_trader" / "seed" / "roster.json").read_text(encoding="utf-8"))
