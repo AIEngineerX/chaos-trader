@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from helius_common import WALLET_API_BASE as HELIUS_WALLET_API, is_helius_endpoint, require_address, rpc_request, wallet_api_key
+from helius_common import WALLET_API_BASE as HELIUS_WALLET_API, is_helius_endpoint, require_address, rpc_request, rpc_tx_request, wallet_api_key
 
 from chaos_home import chaos_home  # noqa: E402
 PROFILE_HOME = chaos_home()
@@ -346,7 +346,7 @@ def fetch_txs_standard(wallet: str, limit: int, pages: int, *, rpc=rpc_request, 
             for row in sigs:
                 if len(txs) >= limit:
                     break
-                tx = rpc("getTransaction", [row["signature"], {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0, "commitment": "finalized"}], timeout=45)
+                tx = rpc_tx_request("getTransaction", [row["signature"], {"encoding": "jsonParsed", "commitment": "finalized"}], rpc=rpc, timeout=45)
                 time.sleep(STANDARD_RPC_CALL_GAP_S)
                 if tx is None:
                     if stats is not None:
@@ -368,11 +368,11 @@ def fetch_txs(wallet: str, limit: int, pages: int, stats: dict[str, int] | None 
     txs: list[dict[str, Any]] = []
     pagination_token = None
     for _ in range(max(1, pages)):
-        params: dict[str, Any] = {"transactionDetails": "full", "limit": min(limit, 100), "sortOrder": "desc", "maxSupportedTransactionVersion": 0, "filters": {"tokenAccounts": "balanceChanged"}}
+        params: dict[str, Any] = {"transactionDetails": "full", "limit": min(limit, 100), "sortOrder": "desc", "filters": {"tokenAccounts": "balanceChanged"}}
         if pagination_token:
             params["paginationToken"] = pagination_token
         try:
-            res = rpc_request("getTransactionsForAddress", [wallet, params], timeout=45, retries=1)
+            res = rpc_tx_request("getTransactionsForAddress", [wallet, params], rpc=rpc_request, timeout=45, retries=1)
         except SystemExit as exc:
             raise RuntimeError(f"Helius transaction fetch failed for {wallet}: {exc}") from exc
         rows = res.get("data", []) if isinstance(res, dict) else []

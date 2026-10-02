@@ -59,7 +59,7 @@ Tables the live sweep fills, for each mint `chaos sweep` ranks and no other:
 - `token_signals`: one row of type `sweep-rank` per mint and 15-minute bucket, with source `chaos_sweep`. `wallet_count` is the number of roster wallets that bought the mint in the last 45 minutes, counted by the fast tape's rules; `tg_channel_count` is 0. A second sweep in the same bucket updates the row. `chaos token --fast`, `chaos sweep --fast`, and `mint_cluster_query` read it.
 - `token_concentration_snapshots`: one row per mint and 15-minute bucket, only when the RPC served the largest-holders read or a sample of it was cached in the last 15 minutes. `supply_pct` is the top-20 share held by wallets and unclassified accounts, after pools, programs, and burn addresses are taken out; `holder_count` stays empty, because no read here counts holders. The public RPC does not serve that read, so on it this table gets no rows, and `chaos token --fast` keeps saying concentration stale there; the `token_signals` rows and `chaos sweep --fast` work on any RPC. The 10-row token-account sample the public RPC does serve cannot stand in: its rows come in arbitrary order, not largest first, and its `total` is the page size, not a holder count. `chaos token --fast` and `mint_cluster_query` read it.
 
-The elite ingest writes neither table. One bounded ingest on the public RPC took 454 seconds of its 540 and touched 58 mints, so a holder read for each of them does not fit inside the bound.
+The elite ingest writes neither table. On the public RPC one bounded ingest already fills its 540 seconds before it reaches every wallet (one run read five of the nine), so a holder read for each mint it touches does not fit inside the bound.
 
 Tables with no writer in this release:
 

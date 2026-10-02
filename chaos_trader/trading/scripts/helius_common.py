@@ -192,6 +192,38 @@ def rpc_request(method: str, params: list[Any] | dict[str, Any] | None = None, *
     raise SystemExit(str(last_error or "unknown Helius error"))
 
 
+# The newest transaction version a full-transaction read asks for. Mainnet serves v1 transactions, and an RPC
+# refuses any transaction newer than the version asked for. jsonParsed reads legacy, v0, and v1 in one shape.
+MAX_TX_VERSION = 1
+_NAMED_TX_VERSION = re.compile(r'"maxSupportedTransactionVersion"\s*:\s*(\d+)')
+
+
+def _named_tx_version(failure: SystemExit) -> int | None:
+    """The version an RPC's refusal names, as in Solana's -32015 error: `... "maxSupportedTransactionVersion": 2`."""
+    try:
+        error = json.loads(str(failure)).get("error")
+    except (ValueError, AttributeError):
+        return None
+    match = _NAMED_TX_VERSION.search(error.get("message") or "") if isinstance(error, dict) else None
+    return int(match.group(1)) if match else None
+
+
+def rpc_tx_request(method: str, params: list[Any], *, rpc=None, **kwargs: Any) -> Any:
+    """`rpc_request` for a read that returns full transactions; the last param is its config object.
+
+    Asks for MAX_TX_VERSION. When the RPC refuses a newer transaction and names the version to ask for, asks once
+    more with that version. `rpc` replaces `rpc_request` for a caller that injects its own."""
+    rpc = rpc or rpc_request
+    *head, config = params
+    try:
+        return rpc(method, [*head, {**config, "maxSupportedTransactionVersion": MAX_TX_VERSION}], **kwargs)
+    except SystemExit as exc:
+        named = _named_tx_version(exc)
+        if named is None or named <= MAX_TX_VERSION:
+            raise
+        return rpc(method, [*head, {**config, "maxSupportedTransactionVersion": named}], **kwargs)
+
+
 def require_address(value: str, label: str = "address") -> str:
     if not BASE58_RE.match(value):
         raise SystemExit(json.dumps({"ok": False, "error": f"Invalid Solana {label} shape", "value_length": len(value)}, indent=2))

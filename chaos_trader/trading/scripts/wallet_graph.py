@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
-from helius_common import require_address, rpc_request, safe_print
+from helius_common import require_address, rpc_request, rpc_tx_request, safe_print
 
 SYSTEM_PROGRAM = "11111111111111111111111111111111"
 TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
@@ -105,7 +105,7 @@ def token_accounts(address: str, limit: int) -> list[dict[str, Any]]:
 
 
 def tx_window(address: str, limit: int, sort: str) -> list[dict[str, Any]]:
-    result = rpc_request(
+    result = rpc_tx_request(
         "getTransactionsForAddress",
         [
             address,
@@ -113,7 +113,6 @@ def tx_window(address: str, limit: int, sort: str) -> list[dict[str, Any]]:
                 "transactionDetails": "full",
                 "limit": limit,
                 "sortOrder": sort,
-                "maxSupportedTransactionVersion": 0,
                 "filters": {"tokenAccounts": "balanceChanged"},
             },
         ],

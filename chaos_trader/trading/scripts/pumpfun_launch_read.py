@@ -12,7 +12,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
-from helius_common import require_address, rpc_request, safe_print
+from helius_common import require_address, rpc_request, rpc_tx_request, safe_print
 from holder_resolver import resolve_holders
 
 PUMPFUN_PROGRAM = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
@@ -28,10 +28,10 @@ def iso(ts: int | None) -> str | None:
     return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
 
 
-def rpc_optional(method: str, params: list[Any]) -> tuple[Any | None, str | None]:
+def rpc_optional(method: str, params: list[Any], request=rpc_request) -> tuple[Any | None, str | None]:
     """Return (result, error) so one noisy RPC method does not kill the whole probe."""
     try:
-        return rpc_request(method, params), None
+        return request(method, params), None
     except SystemExit as exc:
         return None, str(exc)
 
@@ -96,7 +96,8 @@ def main() -> None:
     largest, largest_error = rpc_optional("getTokenLargestAccounts", [mint, {"commitment": "finalized"}])
     tx_result, tx_error = rpc_optional(
         "getTransactionsForAddress",
-        [mint, {"transactionDetails": "full", "limit": limit, "sortOrder": "asc", "maxSupportedTransactionVersion": 0}],
+        [mint, {"transactionDetails": "full", "limit": limit, "sortOrder": "asc"}],
+        request=rpc_tx_request,
     )
     tx_data = tx_result.get("data", []) if isinstance(tx_result, dict) else []
     try:

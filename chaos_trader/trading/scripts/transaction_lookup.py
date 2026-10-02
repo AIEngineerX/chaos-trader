@@ -6,7 +6,7 @@ import argparse
 from datetime import datetime, timezone
 from typing import Any
 
-from helius_common import require_signature, rpc_request, safe_print
+from helius_common import require_signature, rpc_tx_request, safe_print
 
 
 def iso(ts: int | None) -> str | None:
@@ -21,10 +21,7 @@ def main() -> None:
     parser.add_argument("--raw", action="store_true", help="Print raw summarized JSON envelope")
     args = parser.parse_args()
     sig = require_signature(args.signature)
-    tx = rpc_request(
-        "getTransaction",
-        [sig, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0, "commitment": "finalized"}],
-    )
+    tx = rpc_tx_request("getTransaction", [sig, {"encoding": "jsonParsed", "commitment": "finalized"}])
     if tx is None:
         result = {"ok": False, "signature": sig, "error": "Transaction not found at finalized commitment"}
         safe_print(result)

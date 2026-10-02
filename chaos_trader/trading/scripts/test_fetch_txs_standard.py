@@ -43,7 +43,7 @@ class FetchTxsStandardTests(unittest.TestCase):
         self.assertEqual([t["blockTime"] for t in out], [1, 3, 4])
         self.assertEqual(stats, {"null_transactions": 1})
         self.assertEqual(sum(1 for m, _ in calls if m == "getSignaturesForAddress"), 2)
-        self.assertTrue(all(p[1].get("encoding") == "jsonParsed" and p[1].get("maxSupportedTransactionVersion") == 0
+        self.assertTrue(all(p[1].get("encoding") == "jsonParsed" and p[1].get("maxSupportedTransactionVersion") == 1
                             for m, p in calls if m == "getTransaction"))
 
     def test_signature_page_size_capped_at_100(self):

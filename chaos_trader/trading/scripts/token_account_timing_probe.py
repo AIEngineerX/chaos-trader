@@ -12,7 +12,7 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
-from helius_common import rpc_request
+from helius_common import rpc_request, rpc_tx_request
 
 LAMPORTS=1_000_000_000
 
@@ -75,10 +75,10 @@ def token_accounts(owner,mint):
 def fetch_address_txs(address,pages=8,limit=100):
     out=[]; before=None
     for _ in range(pages):
-        cfg={'transactionDetails':'full','limit':min(100,limit),'sortOrder':'desc','maxSupportedTransactionVersion':0}
+        cfg={'transactionDetails':'full','limit':min(100,limit),'sortOrder':'desc'}
         if before: cfg['before']=before
         try:
-            res=rpc_request('getTransactionsForAddress',[address,cfg],timeout=45,retries=2)
+            res=rpc_tx_request('getTransactionsForAddress',[address,cfg],timeout=45,retries=2)
         except SystemExit:
             if before and out: break
             raise
