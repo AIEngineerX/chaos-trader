@@ -47,7 +47,7 @@ On Windows the `chaos` console script lands in the user Scripts folder, which ma
 
 ## Install for Hermes
 
-The repository is also a Hermes profile. Installing it as one gives you `SOUL.md`, a `config.yaml` with a model block, the 14 skills, and three cron jobs. It needs Hermes 0.21.0 or later.
+The repository is also a Hermes profile. Installing it as one gives you `SOUL.md`, a `config.yaml` with a model block, the 14 skills, and four cron jobs. It needs Hermes 0.21.0 or later.
 
     hermes profile install github.com/AIEngineerX/chaos-trader --alias
 
@@ -62,7 +62,7 @@ On a git install of Hermes, its Python is in the `venv` folder of the install di
 
 The model block in the shipped `config.yaml` points at a local OpenAI-compatible server, `http://127.0.0.1:8080/v1`, with a placeholder model name. Run `hermes -p chaos-trader model`, or edit `config.yaml`, to pick a provider. Hermes needs a model with a context window of at least 64K tokens.
 
-The three cron jobs ship paused: the elite ingest every 30 minutes, the paper tick every 5 minutes, and the paper report once a day. Each one is a prompt that asks the agent to run one `chaos` command, so every tick is a model call. `hermes -p chaos-trader cron list` hides paused jobs; `hermes -p chaos-trader cron list --all` shows them. Start one with its id:
+The four cron jobs ship paused: the elite ingest every 30 minutes, the paper tick every 5 minutes, the paper report once a day, and the outcome tick every 15 minutes. Each one is a prompt that asks the agent to run one `chaos` command, so every tick is a model call. `hermes -p chaos-trader cron list` hides paused jobs; `hermes -p chaos-trader cron list --all` shows them. Start one with its id:
 
     hermes -p chaos-trader cron resume chaos-paper-tick
 
@@ -100,13 +100,14 @@ pulls DexScreener's trending and boosted Solana tokens, ranks the top five, and 
 
 `chaos run <script> [args]` runs any pipeline script, job, or skill helper in the package by its file name without `.py`, for example `chaos run smart_wallet_tracker <wallet address>`. `chaos run` alone lists the names and exits 2.
 
-Five commands read data they do not fill themselves. On a fresh home, four of them print one plain sentence and exit 0 instead of a card, and `chaos token --fast` prints an "alpha tape unavailable" card:
+Six commands read data they do not fill themselves. On a fresh home, four of them print one plain sentence and exit 0 instead of a card, `chaos token --fast` prints an "alpha tape unavailable" card, and `chaos outcomes` prints a card that says `NO SCORES YET` and shows no rate:
 
 | Command | What it reads | Filled by |
 |---|---|---|
 | `chaos sweep --fast` | Roster buys from the last 45 minutes in `trading/db/smart_wallets.sqlite`, and the mints the last `chaos sweep` ranked | The elite ingest job fills the roster buys. The live `chaos sweep` writes one `token_signals` row for each mint it ranks, and a concentration snapshot for that mint when the RPC served its largest-holders read. With no buy in that window and no sweep yet it lists no candidates. The freshness line says fresh while the newest roster event and the newest sweep row are under 15 minutes old and the newest snapshot is under an hour old. Roster events count from their time on chain, so a quiet roster reads stale too. The public RPC does not serve the largest-holders read, so no snapshot is written there and the line keeps saying concentration stale. |
 | `chaos token --fast <mint>` | That mint's wallet events, its newest sweep row, and its newest concentration snapshot in `smart_wallets.sqlite` | The elite ingest job and `chaos sweep`, as above. After one of each, while those rows are fresh, the verdict is no longer `stale-tape` on a keyed RPC; on the public RPC it stays `stale-tape`, because concentration stays stale. |
 | `chaos paper-report` | `trading/db/paper_autopilot.sqlite` | the paper tick |
+| `chaos outcomes` | `trading/db/signal_ledger.sqlite`: the token reads and the marks taken after each one | Token reads: each `chaos token`, `chaos analyze token`, `chaos strategy-paper`, deep read in `chaos sweep`, and paper-tick read writes one row. The outcome tick marks each read 15m, 1h, 4h, 24h, 3d, and 7d after it. Until the tick has run, the card says `Outcome tick has not run` |
 | `chaos wallets --discover 5` | the discovery queue in `smart_wallets.sqlite` | the Helius wallet API, through `chaos run smart_wallet_tracker <wallet address>` on a Helius RPC with `HELIUS_API_KEY` set; the ingest job does not fill it |
 | `chaos wallets --review` | Each roster wallet's events, positions, and newest tracker score in `smart_wallets.sqlite` | The elite ingest job. Until its first completed run the command prints `No ingest yet`. Scores come from `chaos run smart_wallet_tracker` |
 
@@ -125,6 +126,7 @@ Which commands work on which RPC:
 | `chaos sweep --fast` | Yes, from the roster buys of the last 45 minutes that the ingest job writes and the rows `chaos sweep` writes to `smart_wallets.sqlite` | The freshness line reaches fresh only on an RPC that serves the largest-holders read, because only that read gives `chaos sweep` a concentration snapshot to write |
 | `chaos token --fast` | Yes, from the mint's wallet events, sweep row, and concentration snapshot in `smart_wallets.sqlite` | Same as `chaos sweep --fast`: on the public RPC the verdict stays `stale-tape` |
 | `chaos paper-report` | Yes, from `paper_autopilot.sqlite` once the paper tick has run | No |
+| `chaos outcomes` | Yes | No |
 | `chaos wallets` | Yes, status and queue from `smart_wallets.sqlite` | No |
 | `chaos wallets --discover` | No | Yes: its queue is fed by the Helius wallet API, which needs a Helius RPC and `HELIUS_API_KEY`. Seed it with `chaos run smart_wallet_tracker <wallet address>` |
 | elite ingest job | Yes, through the standard RPC path | No |
@@ -293,7 +295,7 @@ ElizaOS, in the character file, per the plugin-mcp README (https://www.npmjs.com
 
 ## Running it on a schedule
 
-Six job wrappers ship in the package; run each with `chaos run <name>`. Each one prints a short result. The ingest and the three paper wrappers that write a database take a lock, so two copies of the same job never run at once.
+Seven job wrappers ship in the package; run each with `chaos run <name>`. Each one prints a short result. The ingest, the three paper wrappers that write a database, and the outcome tick take a lock, so two copies of the same job never run at once.
 
 | Wrapper | What it does |
 |---|---|
@@ -303,15 +305,17 @@ Six job wrappers ship in the package; run each with `chaos run <name>`. Each one
 | `chaos_alpha_elite_paper_cycle` | The same cohort cycle, repeated `--max-cycles` times with `--interval-seconds` between runs; the default is one cycle. |
 | `chaos_paper_learning_tick` | Runs `chaos paper-report` once, which reads the paper book and writes a JSON report under `trading/reports/paper_learning/`. |
 | `chaos_wallet_discovery_tick` | Runs `chaos wallets --discover 5`. Needs `HELIUS_API_KEY` for the wallet API. |
+| `chaos_outcome_tick` | Marks every read in `signal_ledger.sqlite` whose 15m, 1h, 4h, 24h, 3d, or 7d horizon is due, with DexScreener's price, and writes `trading/state/outcome_tick_last_run` after a clean run. A mark taken more than 5 minutes after its horizon is recorded late and never counted. `chaos outcomes` reads these marks. |
 
-Add the elite ingest and the paper tick to your own cron to keep the tape and the paper book fresh, and add `chaos_paper_learning_tick` the same way if you also want the daily paper report, the third job the Hermes profile ships:
+Add the elite ingest and the paper tick to your own cron to keep the tape and the paper book fresh, and the outcome tick so `chaos outcomes` has marks to count. Add `chaos_paper_learning_tick` the same way if you also want the daily paper report, the third job the Hermes profile ships:
 
     */30 * * * * CHAOS_HOME=$HOME/.chaos-trader /path/to/your/venv/bin/chaos run chaos_alpha_elite_ingest
     */5  * * * * CHAOS_HOME=$HOME/.chaos-trader /path/to/your/venv/bin/chaos run chaos_paper_autopilot_tick
+    */15 * * * * CHAOS_HOME=$HOME/.chaos-trader /path/to/your/venv/bin/chaos run chaos_outcome_tick
 
 Replace `/path/to/your/venv/bin/chaos` with the `chaos` script in the venv you installed chaos-trader into; `which chaos` prints it after you activate the venv. Cron does not activate a venv, so a bare `chaos` may not be found.
 
-Hermes users: the profile ships these two jobs and a daily paper report as Hermes cron jobs; see Install for Hermes.
+Hermes users: the profile ships these three jobs and a daily paper report as Hermes cron jobs; see Install for Hermes.
 
 On Windows, Task Scheduler does the same job. Use the full path to the interpreter you installed into (`python -c "import sys; print(sys.executable)"` prints it):
 
@@ -319,7 +323,7 @@ On Windows, Task Scheduler does the same job. Use the full path to the interpret
 
 If a path contains spaces, wrap it in `\"` inside the `/tr` value. Task Scheduler does not read your shell's `CHAOS_HOME`. Either keep the default home, or run `setx CHAOS_HOME <CHAOS_HOME>` once so tasks inherit it.
 
-The ingest works on any RPC. On the public RPC, which is rate limited, the first fill can stop at the job's 540-second bound with exit 124. The rows already read stay in `smart_wallets.sqlite`. A second run starts again from the first wallet, skips transactions it already stored, and adds only new ones, so it can hit the bound again. For a first fill, use a Helius RPC. Both jobs return the exit code of the script they wrap. The ingest exits 2 when any wallet read fails, so a cron mailer will report it, and 124 when it times out. The paper tick exits 1 when any candidate's analysis raised an error, non-zero when the autopilot run fails, and 124 when it times out; it exits 0 when it skips because a prior tick still holds the lock.
+The ingest works on any RPC. On the public RPC, which is rate limited, the first fill can stop at the job's 540-second bound with exit 124. The rows already read stay in `smart_wallets.sqlite`. A second run starts again from the first wallet, skips transactions it already stored, and adds only new ones, so it can hit the bound again. For a first fill, use a Helius RPC. Both jobs return the exit code of the script they wrap. The ingest exits 2 when any wallet read fails, so a cron mailer will report it, and 124 when it times out. The paper tick exits 1 when any candidate's analysis raised an error, non-zero when the autopilot run fails, and 124 when it times out; it exits 0 when it skips because a prior tick still holds the lock. The outcome tick exits 2 when DexScreener did not answer for a read that was due, whose mark is then recorded missing, and 124 when it times out; it exits 0 without writing its stamp when it skips because a prior tick still holds the lock.
 
 ## Keeping it current
 
@@ -337,7 +341,9 @@ To replace a `dormant` wallet, run `chaos wallets --add <new address> --tier A|B
 
 A roster wallet that carries a hard flag in any watch file is left out of token reads. A promoter `avoid` verdict also leaves it out unless the same wallet has an actor label from the secondary lane, which takes precedence. `chaos wallets --review` still lists the wallet, so check the promoter output if a wallet you expect never shows as a hit.
 
-Two cron jobs keep the data fresh. The ingest refreshes the stored events and positions. The paper tick refreshes the paper book. The Hermes profile ships three: these two and the daily paper report, which writes the daily summary. Elsewhere, you can add `chaos run chaos_paper_learning_tick` to your cron the same way as the other two.
+Three cron jobs keep the data fresh. The ingest refreshes the stored events and positions. The paper tick refreshes the paper book. The outcome tick marks each token read at its horizons. The Hermes profile ships four: these three and the daily paper report, which writes the daily summary. Elsewhere, you can add `chaos run chaos_paper_learning_tick` to your cron the same way as the other three.
+
+`chaos outcomes` shows how past reads did at one horizon after the read, 24h unless `--window` names another. For each read label it gives the median price change and the share of reads that went up, doubled, or fell 70% or more. For `avoid-entry` and `exit-liquidity-watch` it also gives the share caught: a fall of 70% or more, a pool under $1,000, or a pair gone from DexScreener. A read counts once per mint and label per UTC day, and only when the outcome tick marked it within 5 minutes of its horizon. A pair gone from DexScreener by then counts as a 100% fall. Reads of tokens your own wallets hold never appear. A label with fewer than 20 such reads shows its count and no rate; `--min-n` can raise that floor but not lower it. A public claim about how the reads did may quote this card and nothing else.
 
 The seed roster is a starting set captured on the date in its `captured_at` field. It is not a recommendation.
 

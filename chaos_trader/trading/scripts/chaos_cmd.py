@@ -41,6 +41,7 @@ PAPER_RETIRED = "chaos paper was retired; use chaos paper-report for the paper b
 NO_INGEST_REVIEW = "No ingest yet. Run chaos run chaos_alpha_elite_ingest first."
 JSON_HELP = "Print one JSON envelope: schema_version, command, generated_at, data"
 JSON_EXCLUSIVE = "--json cannot be combined with --raw or --render-json; pick one."
+REFILL_LEDGER = "the next token read starts a new ledger"
 NOTHING_YET_WALLETS = 'Wallet discovery needs transfer edges from the Helius wallet API. With a Helius RPC and HELIUS_API_KEY set, run: chaos run smart_wallet_tracker <wallet address> — then try again.'
 
 
@@ -919,6 +920,27 @@ def cmd_paper_report(args: argparse.Namespace) -> None:
         print(text)
 
 
+def cmd_outcomes(args: argparse.Namespace) -> None:
+    from outcomes_report import aggregate, read_last_run, render_card, unscored
+    from signal_ledger import DEFAULT_DB as LEDGER_DB
+    stop_if_corrupt(LEDGER_DB, REFILL_LEDGER)
+    result = aggregate(LEDGER_DB, window=args.window, min_n=args.min_n)
+    if args.label:
+        label = args.label.lower()
+        result["labels"] = {label: result["labels"].get(label) or unscored(0)}
+    last_run = read_last_run(PROFILE_HOME)
+    payload = {**result, "tick_last_run": last_run.isoformat(timespec="seconds") if last_run else None}
+    if getattr(args, "json", False):
+        print_envelope("outcomes", payload)
+    elif args.raw:
+        print(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False))
+    elif args.render_json:
+        text = render_card(result, last_run)
+        print(json.dumps({"text": text, "format": "plain", "link_preview": {"disabled": True}, "buttons": [], "artifacts": []}, ensure_ascii=False))
+    else:
+        print(render_card(result, last_run))
+
+
 def main() -> None:
     argv = parse_loose(sys.argv[1:])
     p = argparse.ArgumentParser(description="Chaos simple command router (chat or CLI, plain-text cards)")
@@ -1008,6 +1030,16 @@ def main() -> None:
     prp.add_argument("--timeout", type=int, default=120)
     prp.set_defaults(func=cmd_paper_report)
 
+    from outcomes_report import MIN_N, WINDOW_LABELS
+    op = sub.add_parser("outcomes", help="How past reads did at one horizon, per read label; no rate under 20 reads")
+    op.add_argument("label", nargs="?", default=None, help="Show one read label only, for example watch")
+    op.add_argument("--window", choices=WINDOW_LABELS, default="24h", help="Horizon after the read (default 24h)")
+    op.add_argument("--min-n", type=int, default=MIN_N, help=f"Reads a label needs before a rate is shown; {MIN_N} or more")
+    op.add_argument("--raw", action="store_true", help="Emit raw JSON payload")
+    op.add_argument("--render-json", action="store_true", help="Emit render descriptor JSON")
+    op.add_argument("--json", action="store_true", help=JSON_HELP)
+    op.set_defaults(func=cmd_outcomes)
+
     wp = sub.add_parser("wallets", help="Smart-wallet discovery status; --discover N enriches never-scored edge-wallets; --list prints the roster; --review checks it; --add/--remove edit it")
     wmode = wp.add_mutually_exclusive_group()
     wmode.add_argument("--discover", type=int, default=0, help="Enrich up to N never-scored wallets found via funding/transfer edges (Helius reads)")
@@ -1035,6 +1067,7 @@ Commands, run as `chaos <command>`:
 - analyze token <mint>          (deeper token analysis + artifact path)
 - strategy-paper <mint>         (strategy-faithful simulated decision: analyze-token + X; also `paper token <mint>`)
 - paper-report                  (paper learning report: outcomes, blockers, rule recommendations)
+- outcomes [label] [--window 24h]  (how past reads did at one horizon, per read label, from the outcome tick's marks; no rate under 20 reads)
 - smart-signals                 (smart-money cluster evidence; --wallets lists the tracked wallets)
 - wallets                       (smart-wallet discovery status + queue)
 - wallets --discover 5          (enrich up to 5 never-scored edge-wallets, then re-rank)
@@ -1058,12 +1091,14 @@ Optional CLI flags:
 - analyze token <mint> --gmgn    (secondary GMGN evidence; primary Helius/Dex gates unchanged)
 
 Output is a compact card: stats, copy blocks, Open DEX/SOL links, and next-command blocks. Artifacts are saved silently unless --artifact/slow analyze is used.
-sweep, token, analyze, strategy-paper, paper-report, smart-signals, and wallets take --json, which prints one envelope (schema_version, command, generated_at, data) in place of the card; --raw keeps the older unwrapped payload.
+sweep, token, analyze, strategy-paper, paper-report, outcomes, smart-signals, and wallets take --json, which prints one envelope (schema_version, command, generated_at, data) in place of the card; --raw keeps the older unwrapped payload.
 Advisory + paper only. No wallet, signing, routing, or live execution.""".strip()))
 
     args = p.parse_args(argv)
     if args.cmd == "wallets" and bool(args.add) != bool(args.tier):
         wp.error("--add needs --tier A, B, or C" if args.add else "--tier goes with --add")
+    if args.cmd == "outcomes" and args.min_n < MIN_N:
+        op.error(f"--min-n cannot go below {MIN_N}")
     if getattr(args, "json", False) and (getattr(args, "raw", False) or getattr(args, "render_json", False)):
         print(JSON_EXCLUSIVE, file=sys.stderr)
         raise SystemExit(2)

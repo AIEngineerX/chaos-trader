@@ -34,7 +34,7 @@ USAGE = """chaos-trader
       copy the skills to ~/.claude/skills, ~/.agents/skills, or <Hermes home>/skills/blockchain;
       --project writes ./.claude/skills and ./.agents/skills instead; --dry-run writes nothing;
       --force replaces a same-named skill this command did not install
-  chaos token <mint> | sweep | analyze token <mint> | paper-report | wallets | help
+  chaos token <mint> | sweep | analyze token <mint> | paper-report | outcomes | wallets | help
       run the pipeline commands; `chaos help` lists them
   chaos mcp
       serve seven read-only tools over these commands to an MCP agent on stdio; needs the mcp extra

@@ -148,6 +148,8 @@ The limits in this release:
 - A roster hit's timing status in the analysis file is `unknown`, because the read has no first-touch data for it. A roster wallet seen as a repeat signer among pump.fun's top signers shows `scaler` instead.
 - The `chaos paper` verb that read this table was retired in this release.
 
+**How past reads did.** Each token read writes one row to `trading/db/signal_ledger.sqlite` with its gate label and the price at the read: `chaos token`, `chaos analyze token`, `chaos strategy-paper`, a `chaos sweep` deep read, and the paper tick's read. `chaos run chaos_outcome_tick` takes DexScreener's price for each read 15m, 1h, 4h, 24h, 3d, and 7d after it. A mark counts only when it is taken within 5 minutes of its horizon. A later one is recorded late and never counted, so a missed horizon cannot be filled in afterwards. A pair gone from DexScreener inside those 5 minutes is a 100% fall, but only when every DexScreener endpoint answered; when one did not, the mark is recorded missing and the tick exits 2. `chaos outcomes` counts the first read per mint and label per UTC day and gives a label no rate until it has 20 such reads. Reads of tokens your own wallets hold and the sweep's unread candidates are left out.
+
 ## Helius or any RPC
 
 | Command | Any RPC | Needs Helius |
@@ -176,9 +178,10 @@ The limits in this release:
 | Token read | `chaos token <mint> [--fast]`; `chaos analyze token <mint>`; `chaos sweep [--fast]`; `chaos strategy-paper <mint>` |
 | Elite paper book | `chaos run elite_paper_cohort` with `cycle`, `observe`, `mark`, or `status`. Scheduled: `chaos run chaos_alpha_elite_paper_tick` or `chaos run chaos_alpha_elite_paper_cycle` |
 | Paper autopilot | `chaos run chaos_paper_autopilot_tick`; the report is `chaos paper-report` |
+| How past reads did | `chaos outcomes [label] [--window 24h] [--min-n N]`, read from `signal_ledger.sqlite` only; `--window` takes 15m, 1h, 4h, 24h, 3d, or 7d. Scheduled marks: `chaos run chaos_outcome_tick` |
 | External signal feed | `chaos smart-signals`, or `--wallets` with an optional `--tier` of A, B, or C. Its wallets are cached under `trading/cache/smart_money` and never enter the roster or `smart_wallets.sqlite` |
 
-`chaos token` and `chaos analyze token` also take `--gmgn`, which attaches the optional GMGN cross-check to a slow read. It is off by default. `chaos wallets`, the token reads, `chaos paper-report`, and `chaos smart-signals` take `--json` for one machine-readable envelope, described in the README's Configuration section. `chaos run` with an unknown name lists every script it accepts. Every `chaos run` needs a home that `chaos onboard` has set up.
+`chaos token` and `chaos analyze token` also take `--gmgn`, which attaches the optional GMGN cross-check to a slow read. It is off by default. `chaos wallets`, the token reads, `chaos paper-report`, `chaos outcomes`, and `chaos smart-signals` take `--json` for one machine-readable envelope, described in the README's Configuration section. `chaos run` with an unknown name lists every script it accepts. Every `chaos run` needs a home that `chaos onboard` has set up.
 
 ## What this lane does not do
 

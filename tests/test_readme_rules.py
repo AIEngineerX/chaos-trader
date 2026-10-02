@@ -113,9 +113,9 @@ class ReadmeRuleTests(unittest.TestCase):
         self.assertIn('export CHAOS_HOME="$HOME/.chaos-trader"', self.text)
         self.assertIn('$env:CHAOS_HOME = "$HOME\\.chaos-trader"', self.text)
 
-    def test_six_job_wrappers_named(self):
+    def test_seven_job_wrappers_named(self):
         wrappers = sorted(p.stem for p in (ROOT / "chaos_trader" / "jobs").glob("chaos_*.py"))
-        self.assertEqual(len(wrappers), 6)
+        self.assertEqual(len(wrappers), 7)
         for name in wrappers:
             self.assertIn(f"`{name}`", self.text)
 

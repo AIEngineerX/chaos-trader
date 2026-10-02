@@ -45,9 +45,9 @@ class CronJobTests(unittest.TestCase):
     def setUp(self):
         self.jobs = json.loads((ROOT / "cron" / "jobs.json").read_text(encoding="utf-8"))["jobs"]
 
-    def test_three_jobs_ship_paused(self):
+    def test_four_jobs_ship_paused(self):
         self.assertEqual([j["id"] for j in self.jobs],
-                         ["chaos-elite-ingest", "chaos-paper-tick", "chaos-paper-report"])
+                         ["chaos-elite-ingest", "chaos-paper-tick", "chaos-paper-report", "chaos-outcome-tick"])
         for job in self.jobs:
             self.assertFalse(job["enabled"], job["id"])
             self.assertEqual(job["state"], "paused", job["id"])
@@ -61,6 +61,15 @@ class CronJobTests(unittest.TestCase):
             self.assertIn("chaos ", job["prompt"])
             self.assertEqual(job["schedule"]["kind"], "interval")
             self.assertEqual(job["schedule_display"], job["schedule"]["display"])
+
+    def test_outcome_tick_runs_every_15_minutes(self):
+        job = next(j for j in self.jobs if j["id"] == "chaos-outcome-tick")
+        self.assertEqual(job["prompt"], "Run `chaos run chaos_outcome_tick` with the terminal tool and reply with the exit code and the last line.")
+        self.assertEqual(job["skills"], ["chaos-trade-journal"])
+        self.assertEqual(job["schedule"], {"kind": "interval", "minutes": 15, "display": "every 15m"})
+        self.assertTrue((ROOT / "chaos_trader" / "jobs" / "chaos_outcome_tick.py").is_file())
+        # Every job record has the same fields.
+        self.assertEqual({tuple(j) for j in self.jobs}, {tuple(self.jobs[0])})
 
 
 class SoulTests(unittest.TestCase):
