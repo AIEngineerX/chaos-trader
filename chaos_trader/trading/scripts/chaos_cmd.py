@@ -29,7 +29,7 @@ from strategy_paper_engine import render as render_strategy_paper
 import x_provider
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-from chaos_home import chaos_home, unreadable_db  # noqa: E402
+from chaos_home import REFILL_PAPER_BOOK, chaos_home, stop_if_corrupt, unreadable_db  # noqa: E402
 PROFILE_HOME = chaos_home()
 PY = os.environ.get("CHAOS_PYTHON", sys.executable)
 MINT_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,88}$")
@@ -814,6 +814,8 @@ def cmd_wallets_review(args: argparse.Namespace) -> None:
 
 
 def cmd_paper_report(args: argparse.Namespace) -> None:
+    from paper_learning_report import PAPER_DB
+    stop_if_corrupt(PAPER_DB, REFILL_PAPER_BOOK)  # one line here, not the report's failure block
     proc = subprocess.run([PY, str(SCRIPT_DIR / "paper_learning_report.py"), "--limit", str(args.limit)], env=env(), text=True, encoding="utf-8", capture_output=True, timeout=args.timeout)
     if proc.returncode != 0:
         print(f"☄️ PAPER LEARNING REPORT failed\n{(proc.stderr or proc.stdout).strip()[:800]}")

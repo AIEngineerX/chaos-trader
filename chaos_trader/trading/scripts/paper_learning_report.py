@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from chaos_home import chaos_home  # noqa: E402
+from chaos_home import REFILL_PAPER_BOOK, chaos_home, stop_if_corrupt  # noqa: E402
 from alpha_paper_trade import connect_ro  # noqa: E402
 PROFILE_HOME = chaos_home()
 PAPER_DB = PROFILE_HOME / "trading" / "db" / "paper_autopilot.sqlite"
@@ -36,6 +36,8 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=250)
     args = ap.parse_args()
     con = connect_ro(Path(args.db))
+    if con is None:
+        stop_if_corrupt(Path(args.db), REFILL_PAPER_BOOK)  # a corrupt book must not read as "no activity yet"
     if con is None or not {"events", "paper_positions", "paper_fills"} <= {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}:
         if con is not None:
             con.close()

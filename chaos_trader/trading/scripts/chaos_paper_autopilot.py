@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-from chaos_home import chaos_home  # noqa: E402
+from chaos_home import REFILL_PAPER_BOOK, chaos_home, unreadable_db  # noqa: E402
 PROFILE_HOME = chaos_home()
 CONFIG_PATH = PROFILE_HOME / "trading" / "config" / "paper_autopilot.yaml"
 DEFAULT_DB = PROFILE_HOME / "trading" / "db" / "paper_autopilot.sqlite"
@@ -299,11 +299,15 @@ class PaperAutopilotRunner:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         con = sqlite3.connect(self.db_path, timeout=30.0, factory=ClosingConnection)
         con.row_factory = sqlite3.Row
-        con.execute("PRAGMA busy_timeout=30000")
-        con.execute("PRAGMA journal_mode=WAL")
-        con.execute("PRAGMA foreign_keys=ON")
-        con.executescript(SCHEMA)
-        self.ensure_schema(con)
+        try:
+            con.execute("PRAGMA busy_timeout=30000")
+            con.execute("PRAGMA journal_mode=WAL")
+            con.execute("PRAGMA foreign_keys=ON")
+            con.executescript(SCHEMA)
+            self.ensure_schema(con)
+        except sqlite3.DatabaseError as exc:
+            con.close()
+            raise SystemExit(unreadable_db(self.db_path, exc, REFILL_PAPER_BOOK))
         return con
 
     def ensure_schema(self, con: sqlite3.Connection) -> None:
