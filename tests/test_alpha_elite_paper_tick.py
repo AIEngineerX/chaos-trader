@@ -5,6 +5,7 @@ import io
 import json
 import os
 import sqlite3
+import sys
 import tempfile
 import unittest
 from contextlib import closing, redirect_stdout
@@ -14,6 +15,7 @@ from unittest.mock import patch
 from chaos_trader.onboard import onboard
 
 ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = ROOT / "chaos_trader" / "trading" / "scripts"
 NO_INGEST = "No ingest yet. Run chaos run chaos_alpha_elite_ingest first."
 SCRIPT = ROOT / "chaos_trader" / "jobs" / "chaos_alpha_elite_paper_tick.py"
 SPEC = importlib.util.spec_from_file_location("chaos_alpha_elite_paper_tick", SCRIPT)
@@ -50,9 +52,20 @@ class RealCycleTests(unittest.TestCase):
         self.db_dir = self.home / "trading" / "db"
 
     def run_cycle(self) -> tuple[int, str]:
+        """Run one cycle and keep a spy on load_roster in self.load_roster.
+
+        The cohort's default roster comes from elite_wallet_pipeline, which reads CHAOS_HOME once, at import.
+        An earlier import in this process may have used another home, so the module is imported fresh under
+        this one; patch.dict puts sys.modules back afterwards."""
+        if str(SCRIPTS) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS))
         out = io.StringIO()
-        with patch.dict(os.environ, {"CHAOS_HOME": str(self.home)}, clear=False), redirect_stdout(out):
-            code = wrapper.run_cycle_once(self.home)
+        with patch.dict(os.environ, {"CHAOS_HOME": str(self.home)}, clear=False), patch.dict(sys.modules):
+            for name in ("chaos_home", "elite_wallet_pipeline"):
+                sys.modules.pop(name, None)
+            pipeline = importlib.import_module("elite_wallet_pipeline")
+            with patch.object(pipeline, "load_roster", wraps=pipeline.load_roster) as self.load_roster, redirect_stdout(out):
+                code = wrapper.run_cycle_once(self.home)
         return code, out.getvalue()
 
     def test_fresh_home_prints_no_ingest_and_creates_nothing(self) -> None:
@@ -60,7 +73,18 @@ class RealCycleTests(unittest.TestCase):
         code, out = self.run_cycle()
         self.assertEqual(0, code)
         self.assertEqual(NO_INGEST, out.strip())
+        self.load_roster.assert_not_called()
         self.assertFalse((self.db_dir / "alpha_elite_paper.sqlite").exists())
+        self.assertFalse((self.home / "trading" / "reports" / "alpha_elite_paper").exists())
+
+    def test_corrupt_evidence_database_exits_1_with_one_line(self) -> None:
+        (self.db_dir / "smart_wallets.sqlite").write_bytes(bytes(range(256)) * 24)
+        with self.assertRaises(SystemExit) as raised:
+            self.run_cycle()
+        self.assertEqual(
+            f"{self.db_dir / 'smart_wallets.sqlite'} is not a readable SQLite database. Move it aside and run the ingest again.",
+            raised.exception.code,
+        )
         self.assertFalse((self.home / "trading" / "reports" / "alpha_elite_paper").exists())
 
     def test_cycle_on_a_schema_built_database_writes_a_receipt(self) -> None:
@@ -68,6 +92,8 @@ class RealCycleTests(unittest.TestCase):
             con.executescript((self.db_dir / "smart_wallets_schema.sql").read_text(encoding="utf-8"))
         code, out = self.run_cycle()
         self.assertEqual(0, code, out)
+        # The home roster onboard wrote, through the cohort's own default; no second roster constant.
+        self.load_roster.assert_called_once_with(self.home / "trading" / "config" / "roster.json")
         self.assertTrue(out.startswith("☄️ ALPHA ELITE PAPER · CYCLE"), out)
         self.assertIn("Observed events 0 · opened 0 · rejected 0", out)
         receipts = list((self.home / "trading" / "reports" / "alpha_elite_paper").glob("elite_paper_*.json"))

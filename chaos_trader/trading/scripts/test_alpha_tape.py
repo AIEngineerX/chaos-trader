@@ -5,6 +5,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -211,6 +212,28 @@ class AlphaTapeTests(unittest.TestCase):
             with self.assertRaises(sqlite3.OperationalError):
                 ro.execute("INSERT INTO t VALUES (2)")
             ro.close()
+
+    def test_stop_if_corrupt_tape_stops_only_on_a_corrupt_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            db = Path(td) / "smart_wallets.sqlite"
+            old = alpha_tape.DB_PATH
+            try:
+                alpha_tape.DB_PATH = db
+                self.assertIsNone(alpha_tape.stop_if_corrupt_tape())  # missing: the caller's fresh-home case
+                db.write_bytes(bytes(range(256)) * 24)
+                with self.assertRaises(SystemExit) as raised:
+                    alpha_tape.stop_if_corrupt_tape()
+                self.assertEqual(f"{db} is not a readable SQLite database. Move it aside and run the ingest again.", raised.exception.code)
+                # A lock is not damage: it passes, so a busy tape stays unavailable for this tick only.
+                db.unlink()
+                with closing(sqlite3.connect(db)) as holder:
+                    holder.execute("CREATE TABLE t(x)")
+                    holder.commit()
+                    holder.execute("BEGIN EXCLUSIVE")
+                    self.assertIsNone(alpha_tape.stop_if_corrupt_tape())
+                    holder.rollback()
+            finally:
+                alpha_tape.DB_PATH = old
 
     def test_missing_db_returns_explicit_unavailable(self):
         with tempfile.TemporaryDirectory() as td:

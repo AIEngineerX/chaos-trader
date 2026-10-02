@@ -444,6 +444,27 @@ class ElitePaperCohortTests(unittest.TestCase):
                     self.assertEqual("", p.stderr)
                     self.assertFalse(paper_db.exists())
 
+    def test_cycle_and_observe_on_a_corrupt_evidence_database_exit_1_with_one_line(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            env = {k: v for k, v in os.environ.items() if k not in ("CHAOS_PROFILE_HOME", "HERMES_HOME")}
+            env.update(CHAOS_HOME=str(home), PYTHONIOENCODING="utf-8")
+            evidence = home / "smart_wallets.sqlite"
+            evidence.write_bytes(bytes(range(256)) * 24)
+            for command in ("cycle", "observe"):
+                with self.subTest(command=command):
+                    p = subprocess.run(
+                        [sys.executable, str(SCRIPT_DIR / "elite_paper_cohort.py"), command,
+                         "--db", str(home / "paper.sqlite"), "--evidence-db", str(evidence)],
+                        capture_output=True, text=True, encoding="utf-8", env=env, timeout=120, check=False,
+                    )
+                    self.assertEqual(1, p.returncode, p.stdout + p.stderr)
+                    self.assertEqual("", p.stdout)
+                    self.assertEqual(
+                        f"{evidence} is not a readable SQLite database. Move it aside and run the ingest again.",
+                        p.stderr.strip(),
+                    )
+
 
 def tearDownModule() -> None:
     for con in _OPEN:

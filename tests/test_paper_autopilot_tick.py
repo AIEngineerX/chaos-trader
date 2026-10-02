@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+
+from chaos_trader.onboard import onboard
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "chaos_trader" / "jobs" / "chaos_paper_autopilot_tick.py"
@@ -54,6 +57,21 @@ class PaperAutopilotTickTests(unittest.TestCase):
         self.assertEqual("50", cmd[cmd.index("--limit") + 1])
         self.assertEqual("10", cmd[cmd.index("--analyze-top") + 1])
         self.assertEqual(str(Path(td)), run.call_args.kwargs["env"]["HERMES_HOME"])
+
+    def test_corrupt_wallet_database_fails_the_real_tick_with_one_line(self) -> None:
+        # The real job and the real autopilot child on an onboarded home. The child reads the wallet tape
+        # before any market read, so the junk file stops it before the network is touched.
+        with tempfile.TemporaryDirectory() as td:
+            home = onboard(Path(td) / "home", rpc_url=None, helius_key=None)
+            db = home / "trading" / "db" / "smart_wallets.sqlite"
+            db.write_bytes(bytes(range(256)) * 24)
+            env = {k: v for k, v in os.environ.items() if k not in ("CHAOS_PROFILE_HOME", "HERMES_HOME")}
+            env.update(CHAOS_HOME=str(home), PYTHONIOENCODING="utf-8")
+            p = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True, encoding="utf-8",
+                               env=env, timeout=300, check=False)
+        self.assertEqual(1, p.returncode, p.stdout + p.stderr)
+        self.assertEqual(f"{db} is not a readable SQLite database. Move it aside and run the ingest again.", p.stdout.strip())
+        self.assertNotIn("Traceback", p.stdout + p.stderr)
 
     def test_second_tick_skips_while_lock_held(self) -> None:
         with tempfile.TemporaryDirectory() as td, patch.dict(os.environ, {"CHAOS_HOME": td}, clear=False):

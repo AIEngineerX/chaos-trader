@@ -122,21 +122,46 @@ class WalletsReviewTests(unittest.TestCase):
         self.assertEqual(self.run_review().stdout.strip(), NO_INGEST)
         self.assertEqual(self.run_review("--raw").stdout.strip(), NO_INGEST)
 
-    def test_corrupt_database_exits_1_with_one_line(self):
-        self.db.parent.mkdir(parents=True)
-        self.db.write_bytes(bytes(range(256)) * 24)
-        for extra in ((), ("--raw",)):
-            with self.subTest(extra=extra):
-                p = subprocess.run(
-                    [sys.executable, str(SCRIPT_DIR / "chaos_cmd.py"), "wallets", "--review", *extra],
-                    capture_output=True, text=True, encoding="utf-8", env=self.env, timeout=120, check=False,
-                )
-                self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
-                self.assertEqual(p.stdout, "")
-                self.assertNotIn("Traceback", p.stderr)
-                self.assertEqual(len(p.stderr.strip().splitlines()), 1, p.stderr)
-                self.assertTrue(p.stderr.strip().endswith(
-                    "smart_wallets.sqlite is not a readable SQLite database. Move it aside and run the ingest again."), p.stderr)
+    def run_wallets_failing(self, *args: str) -> str:
+        """Run a `chaos wallets` read that must fail with one stderr line and exit 1; return that line."""
+        p = subprocess.run(
+            [sys.executable, str(SCRIPT_DIR / "chaos_cmd.py"), "wallets", *args],
+            capture_output=True, text=True, encoding="utf-8", env=self.env, timeout=120, check=False,
+        )
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        self.assertEqual(p.stdout, "")
+        self.assertNotIn("Traceback", p.stderr)
+        self.assertEqual(len(p.stderr.strip().splitlines()), 1, p.stderr)
+        return p.stderr.strip()
+
+    def test_corrupt_database_exits_1_with_one_line_on_every_wallets_read(self):
+        # A junk file fails on the header ("file is not a database"); a damaged first page fails on the
+        # schema ("database disk image is malformed"). Both are corruption, so both say to move it aside.
+        move_aside = "smart_wallets.sqlite is not a readable SQLite database. Move it aside and run the ingest again."
+        for damage in ("junk", "malformed"):
+            if damage == "junk":
+                self.db.parent.mkdir(parents=True, exist_ok=True)
+                self.db.write_bytes(bytes(range(256)) * 24)
+            else:
+                self.db.unlink()
+                self.build_db()
+                data = bytearray(self.db.read_bytes())
+                data[100:4096] = b"\xff" * (4096 - 100)
+                self.db.write_bytes(bytes(data))
+            for args in (("--review",), ("--review", "--raw"), ("--discover", "1"), ()):
+                with self.subTest(damage=damage, args=args):
+                    self.assertTrue(self.run_wallets_failing(*args).endswith(move_aside))
+
+    def test_locked_database_shows_the_error_and_says_to_try_again(self):
+        # A lock is not damage: moving the file aside would throw away a good database.
+        self.build_db()
+        with closing(sqlite3.connect(self.db)) as holder:
+            holder.execute("BEGIN EXCLUSIVE")
+            line = self.run_wallets_failing("--review")
+            holder.rollback()
+        self.assertTrue(line.startswith("Could not read "), line)
+        self.assertIn("smart_wallets.sqlite: database is locked. Try again;", line)
+        self.assertNotIn("Move it aside", line)
 
     def test_card_labels_each_roster_wallet(self):
         self.build_db()

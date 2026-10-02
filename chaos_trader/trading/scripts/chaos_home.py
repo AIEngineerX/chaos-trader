@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -26,6 +27,19 @@ def ensure_utf8_stdio() -> None:
         encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "").replace("_", "")
         if encoding != "utf8" and hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
+
+
+def corrupt_db(exc: sqlite3.DatabaseError) -> bool:
+    """True when SQLite says the file itself is damaged, not merely locked or unreadable for now."""
+    return "file is not a database" in str(exc) or "malformed" in str(exc)
+
+
+def unreadable_db(path: Path, exc: sqlite3.DatabaseError) -> str:
+    """One line for a SQLite file a command could not read. Only a corrupt file is worth moving aside;
+    a lock or a permission error passes, so it says to try again and shows SQLite's own words."""
+    if corrupt_db(exc):
+        return f"{path} is not a readable SQLite database. Move it aside and run the ingest again."
+    return f"Could not read {path}: {exc}. Try again; if it keeps failing, check that the file is readable and no other process holds it."
 
 
 ensure_utf8_stdio()

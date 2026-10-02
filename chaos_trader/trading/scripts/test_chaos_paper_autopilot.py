@@ -1432,7 +1432,10 @@ class PaperAutopilotRunnerTests(unittest.TestCase):
 
 
 class PaperAutopilotErrorSurfaceTests(unittest.TestCase):
-    """A tick whose analyses raised must say so: in the discovery event, on the card, and in the exit code."""
+    """A tick whose analyses raised must say so: in the discovery event, on the card, and in the exit code.
+
+    sweep_payload, an in-package step, is stubbed because the autopilot calls it with dex=True, which reads
+    DexScreener; the stub hands discovery one fixed candidate, and the tests check what happens after it."""
 
     def test_discovery_event_records_tape_errors(self):
         def unreadable_tape(limit, **kw):

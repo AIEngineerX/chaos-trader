@@ -50,7 +50,7 @@ FEE_MODEL_VERSION = "paper_fee_model_p0_v1"
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from alpha_tape import ELITE_ACTIONABLE_WINDOW_MINUTES, EXCLUDED_SWEEP_MINTS, connect_ro, parse_utc, sweep_payload  # noqa: E402
+from alpha_tape import ELITE_ACTIONABLE_WINDOW_MINUTES, EXCLUDED_SWEEP_MINTS, connect_ro, parse_utc, stop_if_corrupt_tape, sweep_payload  # noqa: E402
 from dexscreener_client import fetch_token  # noqa: E402
 from gate_classifier import classify_gate  # noqa: E402
 from paper_autopilot_config_check import load_config, validate  # noqa: E402
@@ -527,6 +527,8 @@ class PaperAutopilotRunner:
     def discover(self, con: sqlite3.Connection, *, limit: int | None = None) -> list[dict[str, Any]]:
         max_candidates = int(limit or self.config.get("budgets", "max_candidates", default=25))
         payload = sweep_payload(limit=max_candidates, dex=True)
+        if not payload.get("ok"):
+            stop_if_corrupt_tape()  # a corrupt wallet database fails the tick instead of passing for an empty tape
         rows = list(payload.get("candidates") or [])
         market_meta: dict[str, Any] = {"enabled": False}
         if bool(self.config.get("market_discovery", "enabled", default=False)):

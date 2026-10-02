@@ -14,11 +14,12 @@ import re
 import sqlite3
 import time
 import urllib.parse
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from chaos_home import chaos_home  # noqa: E402
+from chaos_home import chaos_home, corrupt_db, unreadable_db  # noqa: E402
 from smart_wallet_tracker import ONCHAIN_SOURCE_SQL  # noqa: E402
 PROFILE_HOME = chaos_home()
 DB_PATH = PROFILE_HOME / "trading" / "db" / "smart_wallets.sqlite"
@@ -110,6 +111,22 @@ def connect_ro(path: Path) -> sqlite3.Connection | None:
         if con is not None:
             con.close()
         return None
+
+
+def stop_if_corrupt_tape() -> None:
+    """The payloads read a missing, busy, or corrupt wallet database alike as unavailable. A caller that
+    runs unattended calls this when the tape is unavailable: a corrupt file stops it with one line, so a
+    tape that can never fill does not pass for an empty one. Missing or busy stays the caller's to handle."""
+    path = DB_PATH
+    if not path.exists():
+        return
+    quoted = urllib.parse.quote(str(path.resolve()), safe="/:")
+    try:
+        with closing(sqlite3.connect(f"file:{quoted}?mode=ro", uri=True, timeout=2)) as con:
+            con.execute("SELECT count(*) FROM sqlite_master").fetchone()
+    except sqlite3.DatabaseError as exc:
+        if corrupt_db(exc):
+            raise SystemExit(unreadable_db(path, exc))
 
 
 def table_names(con: sqlite3.Connection | None) -> set[str]:

@@ -29,7 +29,7 @@ from strategy_paper_engine import render as render_strategy_paper
 import x_provider
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-from chaos_home import chaos_home  # noqa: E402
+from chaos_home import chaos_home, unreadable_db  # noqa: E402
 PROFILE_HOME = chaos_home()
 PY = os.environ.get("CHAOS_PYTHON", sys.executable)
 MINT_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,88}$")
@@ -642,25 +642,27 @@ def cmd_wallets(args: argparse.Namespace) -> None:
     if args.discover and not db.exists():
         print(NOTHING_YET_WALLETS)
         return
-    if args.discover:
-        from smart_wallet_tracker import discovered_wallets, enrich_wallet, ensure_db
-        con = sqlite3.connect(db)
-        con.execute("PRAGMA foreign_keys=ON")
-        ensure_db(con)
-        targets = discovered_wallets(con, max(1, min(args.discover, 10)))
-        for w in targets:
-            try:
-                enriched.append(enrich_wallet(con, w, 50, 1, True))
-            except Exception as exc:
-                # Discard the failed wallet's pending deletes; without this the
-                # next successful wallet's commit() would seal them.
-                try:
-                    con.rollback()
-                except sqlite3.Error:
-                    pass
-                enriched.append({"wallet": w, "ok": False, "error": str(exc)[:300]})
-        con.close()
-    payload = promoter_run(db, args.limit, bool(args.discover))
+    try:
+        if args.discover:
+            from smart_wallet_tracker import discovered_wallets, enrich_wallet, ensure_db
+            with closing(sqlite3.connect(db)) as con:
+                con.execute("PRAGMA foreign_keys=ON")
+                ensure_db(con)
+                targets = discovered_wallets(con, max(1, min(args.discover, 10)))
+                for w in targets:
+                    try:
+                        enriched.append(enrich_wallet(con, w, 50, 1, True))
+                    except Exception as exc:
+                        # Discard the failed wallet's pending deletes; without this the
+                        # next successful wallet's commit() would seal them.
+                        try:
+                            con.rollback()
+                        except sqlite3.Error:
+                            pass
+                        enriched.append({"wallet": w, "ok": False, "error": str(exc)[:300]})
+        payload = promoter_run(db, args.limit, bool(args.discover))
+    except sqlite3.DatabaseError as exc:
+        raise SystemExit(unreadable_db(db, exc))
     payload["enriched_now"] = enriched
     enrich_failures = sum(1 for e in enriched if "error" in e)
     payload["ok"] = enrich_failures == 0
@@ -786,8 +788,8 @@ def cmd_wallets_review(args: argparse.Namespace) -> None:
             return
         roster = load_roster(PROFILE_HOME / "trading" / "config" / "roster.json", lenient_tiers=True)
         rows = roster_review(db, roster["records"], args.days, datetime.now(timezone.utc))
-    except sqlite3.DatabaseError:
-        raise SystemExit(f"{db} is not a readable SQLite database. Move it aside and run the ingest again.")
+    except sqlite3.DatabaseError as exc:
+        raise SystemExit(unreadable_db(db, exc))
     if getattr(args, "raw", False):
         print(json.dumps(rows, indent=2, ensure_ascii=False))
         return

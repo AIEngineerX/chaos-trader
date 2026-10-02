@@ -30,7 +30,7 @@ from elite_wallet_pipeline import (  # noqa: E402
     load_roster,
 )
 
-from chaos_home import chaos_home  # noqa: E402
+from chaos_home import chaos_home, unreadable_db  # noqa: E402
 PROFILE_HOME = chaos_home()
 DEFAULT_DB = PROFILE_HOME / "trading" / "db" / "alpha_elite_paper.sqlite"
 DEFAULT_REPORT_DIR = PROFILE_HOME / "trading" / "reports" / "alpha_elite_paper"
@@ -178,8 +178,13 @@ def connect(path: Path) -> sqlite3.Connection:
 def connect_evidence(path: Path) -> sqlite3.Connection:
     con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=30.0)
     con.row_factory = sqlite3.Row
-    con.execute("PRAGMA query_only=ON")
-    con.execute("PRAGMA busy_timeout=30000")
+    try:
+        con.execute("PRAGMA query_only=ON")
+        con.execute("PRAGMA busy_timeout=30000")
+        con.execute("SELECT count(*) FROM sqlite_master").fetchone()  # reads the header and schema
+    except sqlite3.DatabaseError as exc:
+        con.close()
+        raise SystemExit(unreadable_db(path, exc))
     return con
 
 
