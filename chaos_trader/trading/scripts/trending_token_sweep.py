@@ -24,6 +24,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from dexscreener_client import fetch_token  # noqa: E402
+from fast_lane_writers import write_ranked  # noqa: E402
 from helius_common import safe_print  # noqa: E402
 from signal_ledger import record_signal  # noqa: E402
 import x_provider  # noqa: E402
@@ -373,6 +374,8 @@ def main() -> None:
             candidate_ledgers.append(record_signal(candidate_signal_payload(c, generated_at, json_path, md_path), source_command="sweep_candidate"))
         except Exception as exc:
             candidate_ledgers.append({"ok": False, "mint": c.get("mint"), "error": str(exc)})
+    # After the deep reads, so a mint they read uses the holder sample they cached.
+    fast_lane = write_ranked(ranked)
 
     payload = {
         "ok": True,
@@ -385,6 +388,7 @@ def main() -> None:
         "deep_reads": deep_reads,
         "filtered_deep_reads": filtered_deep_reads,
         "candidate_ledgers": candidate_ledgers,
+        "fast_lane": fast_lane,
         "x_enabled": x_on,
         "sweep_mode": args.mode,
         "caps": {"limit": limit, "deep": deep, "tx_limit": tx_limit, "x_days": max(1, min(14, args.x_days))},
@@ -411,7 +415,8 @@ def main() -> None:
             market = r.get("market") or {}
             cls = r.get("classification") or {}
             print(f"- {market.get('symbol') or 'UNKNOWN'} `{r['mint']}` -> {cls.get('verdict')} phase={cls.get('attention_phase')} score={cls.get('score')} x_cites={r.get('x_citation_count')}")
-    print(f"\nJSON: {json_path}")
+    print(f"\nFast lane: {fast_lane['token_signals']} token signals, {fast_lane['concentration_snapshots']} concentration snapshots")
+    print(f"JSON: {json_path}")
     print(f"MD:   {md_path}")
     print("Advisory + paper only. No wallet, signing, routing, or live execution.")
 

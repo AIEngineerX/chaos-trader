@@ -44,7 +44,7 @@ Everything lives in `trading/db/smart_wallets.sqlite`, created from `trading/sch
 Tables the ingest and the tracker fill:
 
 - `schema_meta`: the schema name and version, written by the schema file itself.
-- `sources`: the two source ids, `solana_rpc` and `helius_rpc`.
+- `sources`: the two source ids, `solana_rpc` and `helius_rpc`. The live sweep adds a third, `chaos_sweep`.
 - `ingestion_runs`: one row per wallet per run. Ingest rows carry the roster lineage in `notes`.
 - `wallets`: one row per address. Identity and balance fields are filled only by the Helius wallet API pass.
 - `transactions`: the raw transaction cache.
@@ -54,13 +54,20 @@ Tables the ingest and the tracker fill:
 - `wallet_scores`: one row per tracker run on a wallet. The ingest does not write it.
 - `wallet_edges`: funded-by and transfer edges, from the Helius wallet API pass only.
 
+Tables the live sweep fills, for each mint `chaos sweep` ranks and no other:
+
+- `token_signals`: one row of type `sweep-rank` per mint and 15-minute bucket, with source `chaos_sweep`. `wallet_count` is the number of roster wallets that bought the mint in the last 45 minutes, counted by the fast tape's rules; `tg_channel_count` is 0. A second sweep in the same bucket updates the row. `chaos token --fast`, `chaos sweep --fast`, and `mint_cluster_query` read it.
+- `token_concentration_snapshots`: one row per mint and 15-minute bucket, only when the RPC served the largest-holders read or a sample of it was cached in the last 15 minutes. `supply_pct` is the top-20 share held by wallets and unclassified accounts, after pools, programs, and burn addresses are taken out; `holder_count` stays empty, because no read here counts holders. The public RPC does not serve that read, so on it this table gets no rows. `chaos token --fast` and `mint_cluster_query` read it.
+
+The elite ingest writes neither table. One bounded ingest on the public RPC took 454 seconds of its 540 and touched 58 mints, so a holder read for each of them does not fit inside the bound.
+
 Tables with no writer in this release:
 
 - Secondary evidence: `wallet_scores` and `wallet_token_events` rows with `source_id` `secondary_export`. The promoter and `mint_cluster_query` read them.
 - Shared-mint edges: `wallet_edges` rows of type `shared_mint_overlap`. The promoter reads them.
 - `actors` and `actor_wallets`: operator clusters. The promoter, `mint_cluster_query`, and `wallet_quality_report` read `actors`.
-- `token_signals`: historical multi-buy signals. `chaos token --fast` and `mint_cluster_query` read it.
-- `token_concentration_snapshots`: holder concentration. `chaos token --fast` and `mint_cluster_query` read it.
+- `token_signals` rows of any type but `sweep-rank`, such as historical multi-buy signals with Telegram channel counts.
+- `token_concentration_snapshots` for mints the sweep did not rank, and holder counts for any mint.
 - `token_cohorts`: cohort rows. `wallet_ledger_mapper` reads it.
 - `alpha_claims`, `source_scores`, and the notes search tables. Nothing reads them either.
 
@@ -116,7 +123,7 @@ Tiers come from the roster file and are never recomputed. No score or verdict ch
 
 ## How the wallet lane reaches a token read and the paper book
 
-**The fast tape.** `chaos sweep --fast` ranks elite buys. These are `buy` events from ingest runs, with medium or high confidence, from the last 45 minutes. At most three mints count per wallet, and mints are ranked by how many distinct wallets bought them. Two or more wallets on one mint are enough for a `watch` label. Three or more are reported as a multi-buy cluster.
+**The fast tape.** `chaos sweep --fast` ranks elite buys. These are `buy` events from ingest runs, with medium or high confidence, from the last 45 minutes. At most three mints count per wallet, and mints are ranked by how many distinct wallets bought them. Two or more wallets on one mint are enough for a `watch` label. Three or more are reported as a multi-buy cluster. After those it lists the mints of the newest `token_signals` rows, which are the mints the live `chaos sweep` ranked. The tape reads as fresh when the newest roster event and the newest `token_signals` row are under 15 minutes old and the newest concentration snapshot is under an hour old. Otherwise `chaos token --fast` gives `stale-tape`. Roster events count from their time on chain, so the tape goes stale when the roster has not traded for 15 minutes, even right after an ingest. On the public RPC the sweep writes no concentration snapshot, so the tape stays stale there.
 
 **The elite paper cohort.** `chaos run elite_paper_cohort cycle` keeps its own book in `alpha_elite_paper.sqlite`. It reads roster wallets' ingest buys that arrived after its cursor; the first run puts the cursor at the newest stored event, so only later buys count. One buy opens an episode. Other roster wallets buying the same mint within 15 minutes are recorded but not required. Among its checks, it rejects a buy older than 45 minutes and a token with under $25,000 of liquidity.
 

@@ -96,7 +96,7 @@ prints a verdict card for one mint. And:
 
     chaos sweep --limit 5
 
-pulls DexScreener's trending and boosted Solana tokens, ranks the top five, and runs a deep read on the best one. `chaos sweep --fast` instead ranks the tokens the roster wallets bought in the last 45 minutes, from the local database, with no live reads. `chaos help` lists every verb the command accepts, including `onboard`, `update`, `skills`, `run`, `paper-report`, and `smart-signals`.
+pulls DexScreener's trending and boosted Solana tokens, ranks the top five, and runs a deep read on the best one. `chaos sweep --fast` instead ranks the tokens the roster wallets bought in the last 45 minutes and the mints the last `chaos sweep` ranked, from the local database, with no live reads. `chaos help` lists every verb the command accepts, including `onboard`, `update`, `skills`, `run`, `paper-report`, and `smart-signals`.
 
 `chaos run <script> [args]` runs any pipeline script, job, or skill helper in the package by its file name without `.py`, for example `chaos run smart_wallet_tracker <wallet address>`. `chaos run` alone lists the names and exits 2.
 
@@ -104,8 +104,8 @@ Five commands read data they do not fill themselves. On a fresh home, four of th
 
 | Command | What it reads | Filled by |
 |---|---|---|
-| `chaos sweep --fast` | Roster buys from the last 45 minutes in `trading/db/smart_wallets.sqlite` | The elite ingest job. With no buy in that window it lists no candidates. Its freshness line always says stale, because it also counts `token_signals` and concentration snapshots, which nothing in this release writes. |
-| `chaos token --fast <mint>` | That mint's wallet events in `smart_wallets.sqlite` | The elite ingest job. The verdict stays `stale-tape` in this release, for the same reason. |
+| `chaos sweep --fast` | Roster buys from the last 45 minutes in `trading/db/smart_wallets.sqlite`, and the mints the last `chaos sweep` ranked | The elite ingest job fills the roster buys. The live `chaos sweep` writes one `token_signals` row for each mint it ranks, and a concentration snapshot for that mint when the RPC served its largest-holders read. With no buy in that window and no sweep yet it lists no candidates. The freshness line says fresh while the newest roster event and the newest sweep row are under 15 minutes old and the newest snapshot is under an hour old. Roster events count from their time on chain, so a quiet roster reads stale too. The public RPC does not serve the largest-holders read, so no snapshot is written there and the line keeps saying concentration stale. |
+| `chaos token --fast <mint>` | That mint's wallet events, its newest sweep row, and its newest concentration snapshot in `smart_wallets.sqlite` | The elite ingest job and `chaos sweep`, as above. After one of each, while those rows are fresh, the verdict is no longer `stale-tape` on a keyed RPC; on the public RPC it stays `stale-tape`, because concentration stays stale. |
 | `chaos paper-report` | `trading/db/paper_autopilot.sqlite` | the paper tick |
 | `chaos wallets --discover 5` | the discovery queue in `smart_wallets.sqlite` | the Helius wallet API, through `chaos run smart_wallet_tracker <wallet address>` on a Helius RPC with `HELIUS_API_KEY` set; the ingest job does not fill it |
 | `chaos wallets --review` | Each roster wallet's events, positions, and newest tracker score in `smart_wallets.sqlite` | The elite ingest job. Until its first completed run the command prints `No ingest yet`. Scores come from `chaos run smart_wallet_tracker` |
@@ -122,8 +122,8 @@ Which commands work on which RPC:
 | `chaos analyze token` | Yes | Same as `chaos token` |
 | `chaos sweep` | Yes | Same as `chaos token` |
 | `chaos strategy-paper` | Yes: it runs the token analysis itself, so it needs no earlier output | Same as `chaos token` |
-| `chaos sweep --fast` | Yes, from the roster buys of the last 45 minutes that the ingest job writes to `smart_wallets.sqlite` | No |
-| `chaos token --fast` | Yes, from the mint's wallet events in `smart_wallets.sqlite`; the verdict stays `stale-tape` in this release | No |
+| `chaos sweep --fast` | Yes, from the roster buys of the last 45 minutes that the ingest job writes and the rows `chaos sweep` writes to `smart_wallets.sqlite` | The freshness line reaches fresh only on an RPC that serves the largest-holders read, because only that read gives `chaos sweep` a concentration snapshot to write |
+| `chaos token --fast` | Yes, from the mint's wallet events, sweep row, and concentration snapshot in `smart_wallets.sqlite` | Same as `chaos sweep --fast`: on the public RPC the verdict stays `stale-tape` |
 | `chaos paper-report` | Yes, from `paper_autopilot.sqlite` once the paper tick has run | No |
 | `chaos wallets` | Yes, status and queue from `smart_wallets.sqlite` | No |
 | `chaos wallets --discover` | No | Yes: its queue is fed by the Helius wallet API, which needs a Helius RPC and `HELIUS_API_KEY`. Seed it with `chaos run smart_wallet_tracker <wallet address>` |
