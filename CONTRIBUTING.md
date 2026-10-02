@@ -29,7 +29,7 @@ Thanks for looking. This file says how to get a change in and what the gates are
     make gitleaks-scan                # full-history secret scan
     make history-scan dep-audit       # private names in every past blob; known vulnerabilities in the dependencies (needs pip-audit)
 
-`make test` runs both suites with `-W error::ResourceWarning`. A warning is a failure. It needs a git checkout: tests in four files shell out to git, so they fail in a source archive.
+`make test` runs both suites with `-W error::ResourceWarning`. A warning is a failure. It needs a git checkout: the repository suite under `tests/` reads files the sdist does not ship (the workflows, the profile files, `tools/`) and shells out to git. From an unpacked sdist, the package suite runs and passes; the repository suite does not.
 
 `make verify` needs `gitleaks` on PATH, `pip-audit` in the venv (`pip install pip-audit`), and network access, because the dependency audit queries a vulnerability database. With `build` installed as well, the audit reads the same wheel metadata CI audits. On Windows you also need `make`, from MSYS2 or the Git for Windows SDK. Without them, run the commands above by hand with the venv's Python.
 
@@ -51,7 +51,7 @@ CI runs the same checks on Python 3.11 and 3.14, then builds the wheel, checks i
 
 ## Commits
 
-- One logical change per commit, with a `feat:`, `fix:`, `docs:`, `test:`, or `chore:` prefix.
+- One logical change per commit, with a `feat:`, `fix:`, `docs:`, `test:`, `build:`, `ci:`, or `chore:` prefix.
 - Do not force-push to `main`.
 
 ## Releases

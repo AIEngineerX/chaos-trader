@@ -1,5 +1,6 @@
-"""Metadata lives in pyproject.toml. This hook copies the repo-root skills tree into the wheel and keeps the test
-modules and their fixtures out of it; the source tree and the sdist keep them, and `make test` runs from there."""
+"""Metadata lives in pyproject.toml. This hook copies the repo-root skills tree into the wheel and leaves the test
+modules and their fixtures out of it. The sdist carries the tests and the fixtures (MANIFEST.in); the wheel carries
+neither."""
 import shutil
 from pathlib import Path
 

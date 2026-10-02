@@ -14,7 +14,7 @@ Only the latest 0.1.x release receives fixes.
 
 ## What this package stores
 
-The code never stores wallet keys, signer material, seed phrases, or transaction-authority secrets. Optional API credentials, such as Helius or xAI keys, live only in your local `CHAOS_HOME/.env`. The optional GMGN cross-check, off by default, also reads `GMGN_API_KEY` from `~/.config/gmgn/.env` when the variable is unset. It reads public chain data through the RPC you configure. The `chaos` verbs write only under `CHAOS_HOME` (plus `chaos skills install`, which writes the harness skill folders it prints, and `--force` can replace a same-named skill folder there). Scripts run through `chaos run` default to `CHAOS_HOME` but write wherever their own `--out`/`--db` flags point.
+The code never stores wallet keys, signer material, seed phrases, or transaction-authority secrets. Optional API credentials, such as Helius or xAI keys, live only in your local `CHAOS_HOME/.env`. The optional GMGN cross-check, off by default, also reads `GMGN_API_KEY` from `~/.config/gmgn/.env` when the variable is unset. It reads public chain data through the RPC you configure. The `chaos` verbs write only under `CHAOS_HOME` (plus `chaos skills install`, which writes the harness skill folders it prints, and `--force` can replace a same-named skill folder there). Scripts run through `chaos run` default to `CHAOS_HOME` but write wherever their own output flags (`--db`, `--out`, `--out-dir`, `--report-dir`, `--root`, `--out-prefix`, `--evidence-db`) or the `CHAOS_*_ROOT` env overrides point.
 
 `CHAOS_PYTHON` and `GMGN_CLI` name an interpreter or a binary that the package runs as a child process. They are local trust settings: point them only at executables you trust.
 

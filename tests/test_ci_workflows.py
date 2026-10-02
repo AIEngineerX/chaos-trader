@@ -165,27 +165,34 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertRegex(run, r"pip install pip-audit==\d+\.\d+\.\d+\n")
         self.assertNotRegex(run, r"pip install (build|pip-audit)(\s|$)")
 
-    def test_the_wheel_check_refuses_test_modules_and_keeps_them_in_the_sdist(self):
+    def test_the_wheel_check_refuses_test_modules_and_keeps_tests_and_fixtures_in_the_sdist(self):
         steps = self.workflow["jobs"]["checks"]["steps"]
         names = [s.get("name", "") for s in steps]
         check = steps[names.index("Wheel ships no test modules; the sdist keeps them")]
         self.assertLess(names.index("Build the wheel"), names.index("Wheel ships no test modules; the sdist keeps them"))
         self.assertNotIn("continue-on-error", check)
         python, flag, code = shlex.split(check["run"].strip())
-        with tempfile.TemporaryDirectory() as tmp:
-            dist = Path(tmp) / "dist"
-            dist.mkdir()
-            with zipfile.ZipFile(dist / "chaos_trader-0.1.0-py3-none-any.whl", "w") as wheel:
-                wheel.writestr("chaos_trader/trading/scripts/test_no_redirect.py", "")
-            with tarfile.open(dist / "chaos_trader-0.1.0.tar.gz", "w:gz") as sdist:
-                sdist.addfile(tarfile.TarInfo("chaos_trader-0.1.0/chaos_trader/trading/scripts/test_no_redirect.py"))
-            bad = subprocess.run([sys.executable, flag, code], cwd=tmp, capture_output=True, text=True)
-            (dist / "chaos_trader-0.1.0-py3-none-any.whl").unlink()
-            with zipfile.ZipFile(dist / "chaos_trader-0.1.0-py3-none-any.whl", "w") as wheel:
-                wheel.writestr("chaos_trader/cli.py", "")
-            good = subprocess.run([sys.executable, flag, code], cwd=tmp, capture_output=True, text=True)
-        self.assertNotEqual(bad.returncode, 0)
-        self.assertIn("test_no_redirect.py", bad.stderr)
+        scripts = "chaos_trader-0.1.0/chaos_trader/trading/scripts/"
+
+        def run(wheel_entry: str, sdist_entries: list[str]) -> subprocess.CompletedProcess:
+            with tempfile.TemporaryDirectory() as tmp:
+                dist = Path(tmp) / "dist"
+                dist.mkdir()
+                with zipfile.ZipFile(dist / "chaos_trader-0.1.0-py3-none-any.whl", "w") as wheel:
+                    wheel.writestr(wheel_entry, "")
+                with tarfile.open(dist / "chaos_trader-0.1.0.tar.gz", "w:gz") as sdist:
+                    for entry in sdist_entries:
+                        sdist.addfile(tarfile.TarInfo(scripts + entry))
+                return subprocess.run([sys.executable, flag, code], cwd=tmp, capture_output=True, text=True)
+
+        full_sdist = ["test_no_redirect.py", "fixtures/xai_http_fake.py"]
+        test_in_wheel = run("chaos_trader/trading/scripts/test_no_redirect.py", full_sdist)
+        self.assertNotEqual(test_in_wheel.returncode, 0)
+        self.assertIn("test_no_redirect.py", test_in_wheel.stderr)
+        no_fixtures = run("chaos_trader/cli.py", ["test_no_redirect.py"])
+        self.assertNotEqual(no_fixtures.returncode, 0)
+        self.assertIn("the sdist lost the test fixtures", no_fixtures.stderr)
+        good = run("chaos_trader/cli.py", full_sdist)
         self.assertEqual(good.returncode, 0, good.stderr)
 
     def test_ci_installs_the_mcp_extra_so_the_server_tests_run(self):

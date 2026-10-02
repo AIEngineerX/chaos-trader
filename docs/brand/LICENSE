@@ -1,0 +1,21 @@
+Chaos character art: licence
+
+The files in this folder, and any image `tools/make_banner.py` produces from them, are:
+
+    chaos.jpg     the Chaos character
+    banner.png    derived from chaos.jpg
+    header.png    derived from chaos.jpg
+
+They are licensed under the Creative Commons Attribution 4.0 International licence (CC BY 4.0).
+Full text: https://creativecommons.org/licenses/by/4.0/legalcode
+
+You may copy, share, adapt, and use them, including commercially, as long as you give credit.
+Use this credit line, or one that carries the same information:
+
+    Chaos character art (c) AIEngineerX, chaos-trader project, CC BY 4.0
+    https://github.com/AIEngineerX/chaos-trader
+
+If you adapt the art, say that you changed it. Do not suggest that the project endorses your use.
+
+This licence covers the images in this folder only. The code in this repository is under the MIT
+License in the repository root `LICENSE`; the attribution for third-party code is in `NOTICE`.

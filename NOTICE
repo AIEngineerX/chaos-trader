@@ -1,6 +1,12 @@
 chaos-trader
 Copyright (c) 2026 AIEngineerX. Licensed under the MIT License; see LICENSE.
 
+The Chaos character art in docs/brand (chaos.jpg, banner.png, header.png) is not
+code and is not under the MIT License. It is licensed under Creative Commons
+Attribution 4.0 International (CC BY 4.0); the terms and the credit line to use
+are in docs/brand/LICENSE. Credit line: Chaos character art (c) AIEngineerX,
+chaos-trader project, CC BY 4.0.
+
 This package includes third-party code under the MIT License.
 
 --------------------------------------------------------------------------------

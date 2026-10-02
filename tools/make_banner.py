@@ -1,3 +1,7 @@
+"""Builds docs/brand/banner.png and header.png from docs/brand/chaos.jpg.
+
+The source and every image this script produces are CC BY 4.0; the credit line is in docs/brand/LICENSE.
+"""
 from __future__ import annotations
 
 import random

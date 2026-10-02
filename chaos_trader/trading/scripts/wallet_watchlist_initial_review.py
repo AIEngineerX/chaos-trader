@@ -66,7 +66,10 @@ def rpc_batch(calls: list[dict[str, Any]], *, timeout: int = 45, retries: int = 
             if 300 <= exc.code < 400:
                 exc.close()
                 raise RuntimeError(f"HTTP {exc.code}: RPC unavailable: redirect refused")
-            body_text = exc.read().decode("utf-8", "replace")[:500]
+            try:
+                body_text = exc.read().decode("utf-8", "replace")[:500]
+            finally:
+                exc.close()
             last_error = f"HTTP {exc.code}: {body_text}"
             if exc.code not in {429, 500, 502, 503, 504} or attempt >= retries:
                 break

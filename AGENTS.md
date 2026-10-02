@@ -44,7 +44,7 @@ Do not paraphrase it. Do not add buy or sell vocabulary anywhere.
 
 ## Commits and releases
 
-- One logical change per commit, `feat:`, `fix:`, `docs:`, `test:`, or `chore:` prefix, body says what changed and why. Never force-push `main`.
+- One logical change per commit, `feat:`, `fix:`, `docs:`, `test:`, `build:`, `ci:`, or `chore:` prefix, body says what changed and why. Never force-push `main`.
 - CHANGELOG bullets go under the version being prepared.
 - A release is a `vX.Y.Z` tag. `.github/workflows/publish.yml` refuses a tag that does not equal the version in `pyproject.toml` and `distribution.yaml`, runs the tests, builds, and publishes to PyPI by trusted publishing. Rollback is described in `CONTRIBUTING.md`.
 
