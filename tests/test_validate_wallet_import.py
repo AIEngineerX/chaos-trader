@@ -20,7 +20,8 @@ class ValidateWalletImportTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.tmp = Path(tmp.name)
         self.env = {k: v for k, v in os.environ.items() if k not in ("HELIUS_API_KEY", "SOLANA_RPC_URL", "CHAOS_PROFILE_HOME", "HERMES_HOME")}
-        self.env.update(CHAOS_HOME=str(self.tmp / "home"), PYTHONIOENCODING="utf-8")
+        # HOME and USERPROFILE point into the temp folder too, so nothing reads or writes the real user folder.
+        self.env.update(CHAOS_HOME=str(self.tmp / "home"), HOME=str(self.tmp), USERPROFILE=str(self.tmp), PYTHONIOENCODING="utf-8")
         p = self.run_chaos("onboard", "--rpc-url", PUBLIC_RPC, "--yes")
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
 
