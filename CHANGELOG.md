@@ -39,4 +39,5 @@ All notable changes to this package. Dates are UTC.
 - X evidence through `X_SEARCH_PROVIDER` (`hermes`, `xai`, `none`); unsourced answers never change a verdict.
 - Fresh-home behaviour: every command exits 0 with a plain sentence when there is nothing to show.
 - Vendor and owner-name gate by digest; CI with full-history gitleaks and a wheel-content check.
+- Workflow contract for agents and contributors (AGENTS.md, CLAUDE.md); three study scripts read and write under CHAOS_HOME; the publish workflow checks both version files.
 - Not in this release: any execution, signing, routing, or key handling. Wallet discovery still needs a Helius key.

@@ -15,7 +15,7 @@ RECOMMENDATION = ("This package labels tokens study, watch, manual-review, or av
                   "enter, wait, or avoid; and for tokens your own wallets hold it reports a position state (hold-core, "
                   "manage, trim-risk, or exit-watch) that describes risk, not an instruction. It never says buy or sell, "
                   "and it cannot sign, route, or send.")
-RECOMMENDATION_FILES = ["README.md", "SECURITY.md", "BOUNDARY.md", "SOUL.md",
+RECOMMENDATION_FILES = ["README.md", "SECURITY.md", "BOUNDARY.md", "SOUL.md", "AGENTS.md",
                         "skills/blockchain/chaos-crypto-trader/SKILL.md",
                         "skills/blockchain/chaos-execution-control/SKILL.md"]
 # A trade recommendation in prose: buy/sell, trim, or exit in a sentence that recommends, advises, or gives a
@@ -27,7 +27,7 @@ TRADE_WORDS = re.compile(r"buy/sell|buy, sell|(?<![\w-])(?:trim|exit)(?![\w-])",
 ADVICE_WORDS = re.compile(r"\b(?:recommend\w*|advice|advis\w*|verdicts?|calls?)\b", re.I)
 NEGATION = re.compile(r"\b(?:never|not|no)\b", re.I)
 VERDICT_LABEL = re.compile(r"`(?:buy|sell|hold|trim|exit)`", re.I)
-GUARDED_FILES = ["README.md", "SECURITY.md", "BOUNDARY.md", "SOUL.md",
+GUARDED_FILES = ["README.md", "SECURITY.md", "BOUNDARY.md", "SOUL.md", "AGENTS.md", "CLAUDE.md",
                  *sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "skills" / "blockchain").glob("*/SKILL.md"))]
 SECURITY_HEADINGS = ["# Security", "## Reporting a vulnerability", "## Supported versions", "## What this package stores",
                      "## Execution boundary", "## Forbidden in the repository", "## Release gate"]
@@ -165,8 +165,8 @@ class SecurityPolicyTests(unittest.TestCase):
         for target in targets:
             self.assertRegex(makefile, rf"(?m)^{re.escape(target)}:\n\t[^-]", target)
 
-    def test_security_and_boundary_have_no_banned_words(self):
-        for name in ("SECURITY.md", "BOUNDARY.md"):
+    def test_security_boundary_and_agent_files_have_no_banned_words(self):
+        for name in ("SECURITY.md", "BOUNDARY.md", "AGENTS.md", "CLAUDE.md"):
             low = (ROOT / name).read_text(encoding="utf-8").lower()
             self.assertEqual([w for w in BANNED if re.search(rf"\b{re.escape(w)}", low)], [], name)
 

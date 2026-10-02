@@ -31,7 +31,7 @@ Install from GitHub:
 
     pip install git+https://github.com/AIEngineerX/chaos-trader
 
-Releases are also published to PyPI as `chaos-trader` from the v0.1.0 tag onward.
+Releases are published to PyPI by the tag workflow; until the first tag, install from GitHub.
 
 From source:
 

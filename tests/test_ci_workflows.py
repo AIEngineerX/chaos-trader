@@ -34,13 +34,17 @@ class PublishWorkflowTests(unittest.TestCase):
         # One trigger: a tag push plus a published release would upload the same files twice.
         self.assertEqual(self.workflow["on"], {"push": {"tags": ["v*"]}})
 
-    def test_the_build_refuses_a_tag_that_is_not_the_package_version(self):
+    def version_check(self) -> str:
         steps = self.jobs["build"]["steps"]
         names = [s.get("name", "") for s in steps]
         check = steps[names.index("The tag matches the package version")]
         self.assertLess(names.index("The tag matches the package version"), names.index("Build the wheel and sdist"))
         python, flag, code, tag_arg = shlex.split(check["run"].strip())
         self.assertEqual((python, flag, tag_arg), ("python", "-c", "${GITHUB_REF_NAME#v}"))
+        return code
+
+    def test_the_build_refuses_a_tag_that_is_not_the_package_version(self):
+        code = self.version_check()
         with (ROOT / "pyproject.toml").open("rb") as f:
             version = tomllib.load(f)["project"]["version"]
         # The shell strips the v from the tag, so the script receives the bare version.
@@ -48,7 +52,18 @@ class PublishWorkflowTests(unittest.TestCase):
         self.assertEqual(ok.returncode, 0, ok.stderr)
         bad = subprocess.run([sys.executable, "-c", code, "9.9.9"], cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(bad.returncode, 1)
-        self.assertEqual(bad.stderr.strip(), f"tag v9.9.9 does not match the pyproject.toml version {version}")
+        self.assertEqual(bad.stderr.strip(),
+                         f"tag v9.9.9 does not match the pyproject.toml version {version} and the distribution.yaml version {version}")
+
+    def test_the_build_refuses_a_tag_that_is_not_the_profile_version(self):
+        # A tag equal to pyproject.toml still fails when distribution.yaml says something else.
+        code = self.version_check()
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n', encoding="utf-8")
+            (Path(tmp) / "distribution.yaml").write_text('name: chaos-trader\nversion: "1.2.4"\n', encoding="utf-8")
+            bad = subprocess.run([sys.executable, "-c", code, "1.2.3"], cwd=tmp, capture_output=True, text=True)
+        self.assertEqual(bad.returncode, 1)
+        self.assertEqual(bad.stderr.strip(), "tag v1.2.3 does not match the distribution.yaml version 1.2.4")
 
     def test_only_the_publish_job_gets_an_oidc_token(self):
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})
