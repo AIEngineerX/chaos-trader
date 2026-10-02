@@ -22,11 +22,11 @@ All notable changes to this package. Dates are UTC.
 - The home roster is a watch source for token reads (A and B count as quality hits, C as scout); the promoter's candidate and sensor verdicts count too.
 - Seed roster v2: nine live wallets. `chaos wallets --review` reports each roster wallet's last activity and track record from the local database. README gains Keeping it current.
 - A key in a request URL never follows an HTTP redirect either: the RPC client, the Helius Wallet API reads in `wallet_deep` and wallet discovery, the watchlist review's batch RPC, and the Solana skill helper refuse every 3xx and report `unavailable: redirect refused` without the key.
+- The wheel ships no test modules or fixtures; the source tree and the sdist keep them, and CI and `tests/test_wheel_contents.py` check both. CI pins `actions/checkout`, `setup-python`, and `setup-go` by commit SHA, as the publish workflow does, and installs pinned versions of `build` and `pip-audit`.
 - Bearer tokens no longer follow HTTP redirects (signal API, xAI); the safety check scans journal directories; build requires setuptools 83 or newer.
 - Known: `alpha_intake_local.py` prints source names and raw note text from your own imported export. The output stays on your machine.
 - Makefile works with a relative `PY`; macOS temp-path test fix; key-storage wording; 60-second path; PEP 639 license metadata.
 - `chaos run` keeps the caller's working directory, so relative `--roster` and `--out` paths resolve where you are; all of `trading/reports/` is ignored; the data folders are declared to setuptools; wording fixes from the public-release review.
-- Known: the wheel carries the tests under `chaos_trader/trading/scripts/test_*.py`; accepted for 0.1.0.
 - The 14 skills live at the repository root under `skills/blockchain/`; the wheel still carries them.
 - The repository is a Hermes profile distribution (`distribution.yaml`, `SOUL.md`, `config.yaml`, `cron/jobs.json` with four jobs shipped paused), installed with `hermes profile install`. The profile is named `chaos-trader` so the `--alias` wrapper cannot shadow the `chaos` command.
 - `chaos run <script> [args]` runs any pipeline script, job wrapper, or skill helper from the installed package; `chaos run` alone lists them.

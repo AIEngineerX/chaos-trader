@@ -2,7 +2,8 @@
 a script writes lands under CHAOS_HOME, never in the installed package or anywhere else in the venv.
 
 Real build, real venv, real subprocesses. The wheel is built from a copy of the working tree, so uncommitted
-changes are what gets tested and the checkout gains no build directory."""
+changes are what gets tested and the checkout gains no build directory. pip needs PyPI for the build and for
+PyYAML; without network the test skips and says why."""
 import json
 import os
 import shutil
@@ -10,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,9 +24,19 @@ def files_under(root: Path) -> set[Path]:
     return {p for p in root.rglob("*") if p.is_file()}
 
 
+def pypi_reachable() -> bool:
+    try:
+        with urllib.request.urlopen(urllib.request.Request("https://pypi.org/simple/", method="HEAD"), timeout=3):
+            return True
+    except OSError:
+        return False
+
+
 class StudyScriptsFromAWheelTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if not pypi_reachable():
+            raise unittest.SkipTest("no network: pypi.org did not answer in 3 s, and pip needs it to build the wheel and install PyYAML")
         (ROOT / ".tmp").mkdir(exist_ok=True)
         cls.work = Path(tempfile.mkdtemp(prefix="wheel-install-", dir=ROOT / ".tmp"))
         cls.addClassCleanup(shutil.rmtree, cls.work, ignore_errors=True)

@@ -56,7 +56,7 @@ CI runs the same checks on Python 3.11 and 3.14, then builds the wheel, checks i
 
 ## Releases
 
-A release is cut by pushing a `vX.Y.Z` tag: `.github/workflows/publish.yml` builds the wheel and sdist and uploads them to PyPI by trusted publishing. The tag must equal the package version: the workflow refuses to build when the tag without its `v` differs from the version in `pyproject.toml`. `tests/test_distribution.py` keeps `pyproject.toml`, `chaos_trader/__init__.py`, and `distribution.yaml` on the same version.
+A release is cut by pushing a `vX.Y.Z` tag: `.github/workflows/publish.yml` builds the wheel and sdist and uploads them to PyPI by trusted publishing. The tag must equal the package version: the workflow refuses to build when the tag without its `v` differs from the version in `pyproject.toml` or in `distribution.yaml`, and names each file that differs. `tests/test_distribution.py` keeps `pyproject.toml`, `chaos_trader/__init__.py`, and `distribution.yaml` on the same version.
 
 ## Rollback
 

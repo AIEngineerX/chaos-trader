@@ -1,7 +1,10 @@
-"""The two GitHub workflows, parsed as YAML: CI stays read-only, and the PyPI upload uses trusted publishing."""
+"""The two GitHub workflows, parsed as YAML: CI stays read-only, both pin their actions by commit, and the PyPI
+upload uses trusted publishing."""
+import re
 import shlex
 import subprocess
 import sys
+import tarfile
 import tempfile
 import tomllib
 import unittest
@@ -136,6 +139,54 @@ class CiWorkflowTests(unittest.TestCase):
         scan = next(s for s in steps if s.get("run") == "python tools/history_name_scan.py")
         self.assertNotIn("continue-on-error", scan)
         self.assertFalse([s.get("name") for s in steps if s.get("continue-on-error")])
+
+    def test_every_action_is_pinned_by_commit_sha_like_the_publish_workflow(self):
+        uses = [step["uses"] for job in self.workflow["jobs"].values() for step in job["steps"] if "uses" in step]
+        self.assertEqual(len(uses), 3)
+        for use in uses:
+            self.assertRegex(use, r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$")
+        lines = [line.strip() for line in (WORKFLOWS / "ci.yml").read_text(encoding="utf-8").splitlines() if "uses:" in line]
+        self.assertEqual(len(lines), 3)
+        for line in lines:
+            self.assertRegex(line, r"uses: \S+@[0-9a-f]{40} # v\d+(\.\d+)*$")
+        # An action both workflows use at the same tag is pinned to the same commit in both.
+        publish = {line.split("@")[0]: line for line in (l.strip() for l in (WORKFLOWS / "publish.yml").read_text(encoding="utf-8").splitlines()) if "uses:" in line}
+        for line in lines:
+            action, rest = line.split("@")
+            if action in publish and publish[action].endswith(rest.split(" # ")[1]):
+                self.assertEqual(line, publish[action])
+
+    def test_the_build_and_audit_tools_are_pinned(self):
+        run = "\n".join(s.get("run", "") for s in self.workflow["jobs"]["checks"]["steps"])
+        build = re.search(r"pip install build==(\d+\.\d+\.\d+) ", run)
+        self.assertIsNotNone(build, "CI installs build unpinned")
+        publish_run = "\n".join(s.get("run", "") for s in load("publish.yml")["jobs"]["build"]["steps"])
+        self.assertIn(f"pip install build=={build.group(1)}\n", publish_run)
+        self.assertRegex(run, r"pip install pip-audit==\d+\.\d+\.\d+\n")
+        self.assertNotRegex(run, r"pip install (build|pip-audit)(\s|$)")
+
+    def test_the_wheel_check_refuses_test_modules_and_keeps_them_in_the_sdist(self):
+        steps = self.workflow["jobs"]["checks"]["steps"]
+        names = [s.get("name", "") for s in steps]
+        check = steps[names.index("Wheel ships no test modules; the sdist keeps them")]
+        self.assertLess(names.index("Build the wheel"), names.index("Wheel ships no test modules; the sdist keeps them"))
+        self.assertNotIn("continue-on-error", check)
+        python, flag, code = shlex.split(check["run"].strip())
+        with tempfile.TemporaryDirectory() as tmp:
+            dist = Path(tmp) / "dist"
+            dist.mkdir()
+            with zipfile.ZipFile(dist / "chaos_trader-0.1.0-py3-none-any.whl", "w") as wheel:
+                wheel.writestr("chaos_trader/trading/scripts/test_no_redirect.py", "")
+            with tarfile.open(dist / "chaos_trader-0.1.0.tar.gz", "w:gz") as sdist:
+                sdist.addfile(tarfile.TarInfo("chaos_trader-0.1.0/chaos_trader/trading/scripts/test_no_redirect.py"))
+            bad = subprocess.run([sys.executable, flag, code], cwd=tmp, capture_output=True, text=True)
+            (dist / "chaos_trader-0.1.0-py3-none-any.whl").unlink()
+            with zipfile.ZipFile(dist / "chaos_trader-0.1.0-py3-none-any.whl", "w") as wheel:
+                wheel.writestr("chaos_trader/cli.py", "")
+            good = subprocess.run([sys.executable, flag, code], cwd=tmp, capture_output=True, text=True)
+        self.assertNotEqual(bad.returncode, 0)
+        self.assertIn("test_no_redirect.py", bad.stderr)
+        self.assertEqual(good.returncode, 0, good.stderr)
 
     def test_ci_installs_the_mcp_extra_so_the_server_tests_run(self):
         steps = self.workflow["jobs"]["checks"]["steps"]
