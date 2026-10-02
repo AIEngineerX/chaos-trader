@@ -205,9 +205,15 @@ def track_signal(con: sqlite3.Connection, signal: dict[str, Any], *, dry_run: bo
     # late/missing diagnostics and are excluded from primary calibration.
     should_fetch = any(not late for (_label, _delta, _target_time, _lag, late) in due_meta)
     summary: dict[str, Any] = {}
+    # A pair gone from DexScreener is a -100% mark only when every endpoint answered and none listed a pair.
+    # An endpoint that errored proves nothing, so that mark stays `missing` and the run exits 2.
+    delisted = fetch_failed = False
     if should_fetch:
         dex = fetch_token("solana", signal["mint"], cache=True)
         summary = dex.get("summary") or {}
+        if dex.get("pair_count") == 0:
+            fetch_failed = bool(dex.get("errors"))
+            delisted = not fetch_failed
     price_now = as_float(summary.get("priceUsd"))
     liq_now = as_float(summary.get("liquidity_usd"))
     mc_now = as_float(summary.get("marketCap"))
@@ -226,6 +232,11 @@ def track_signal(con: sqlite3.Connection, signal: dict[str, Any], *, dry_run: bo
         if late_snapshot:
             alive, status = "dead", "missing_late"
             row_price = row_liq = row_mc = row_fdv = row_ret = row_liq_chg = row_mc_chg = None
+        elif delisted and price_start is not None:
+            alive, status = "dead", "delisted"
+            primary_eligible = True
+            row_price = row_liq = row_mc = row_fdv = row_liq_chg = row_mc_chg = None
+            row_ret = -100.0
         elif not has_mark:
             alive, status = "dead", "missing"
             row_price = row_liq = row_mc = row_fdv = row_ret = row_liq_chg = row_mc_chg = None
@@ -266,7 +277,7 @@ def track_signal(con: sqlite3.Connection, signal: dict[str, Any], *, dry_run: bo
             "dex_url": summary.get("url") if should_fetch else None,
             "raw_json": json.dumps(raw, ensure_ascii=False, sort_keys=True, default=str),
         }
-        written.append({"signal": signal["id"], "mint": signal["mint"], "window": label, "return_pct": row_ret, "status": status, "late_snapshot": late_snapshot, "target_lag_seconds": target_lag, "primary_eligible": primary_eligible})
+        written.append({"signal": signal["id"], "mint": signal["mint"], "window": label, "return_pct": row_ret, "status": status, "late_snapshot": late_snapshot, "target_lag_seconds": target_lag, "primary_eligible": primary_eligible, "fetch_failed": fetch_failed and not late_snapshot})
         if dry_run:
             continue
         cols = list(row.keys())
@@ -311,17 +322,23 @@ def main() -> None:
             print(json.dumps({"ok": True, "db_path": args.db, "outcomes": rows}, indent=2, ensure_ascii=False) if args.raw else render_rows(rows))
             return
         written: list[dict[str, Any]] = []
-        for signal in due_signals(con, limit=args.limit, include_candidates=args.include_candidates):
+        due = due_signals(con, limit=args.limit, include_candidates=args.include_candidates)
+        for signal in due:
             written.extend(track_signal(con, signal, dry_run=args.dry_run))
+        unanswered = len({row["signal"] for row in written if row["fetch_failed"]})
         if args.raw:
-            print(json.dumps({"ok": True, "dry_run": args.dry_run, "written": written}, indent=2, ensure_ascii=False))
-            return
-        print(f"☄️ Outcome tracker · {'dry-run ' if args.dry_run else ''}{len(written)} outcomes")
-        for row in written[:25]:
-            print(f"signal#{row['signal']} {row['window']} {row['mint'][:6]}…{row['mint'][-4:]} return={row['return_pct']}% status={row['status']}")
-        print("read-only repricing; no execution")
+            print(json.dumps({"ok": not unanswered, "dry_run": args.dry_run, "due": len(due), "written": written}, indent=2, ensure_ascii=False))
+        else:
+            print(f"☄️ Outcome tracker · {'dry-run ' if args.dry_run else ''}{len(due)} due · {len(written)} outcomes")
+            for row in written[:25]:
+                print(f"signal#{row['signal']} {row['window']} {row['mint'][:6]}…{row['mint'][-4:]} return={row['return_pct']}% status={row['status']}")
+            if unanswered:
+                print(f"DexScreener did not answer for {unanswered} read{'s' if unanswered != 1 else ''}; those marks are recorded missing")
+            print("read-only repricing; no execution")
     finally:
         con.close()
+    if unanswered:
+        raise SystemExit(2)
 
 
 def render_rows(rows: list[dict[str, Any]]) -> str:
