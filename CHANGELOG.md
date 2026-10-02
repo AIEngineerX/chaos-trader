@@ -2,12 +2,9 @@
 
 All notable changes to this package. Dates are UTC.
 
-## Unreleased
-
-- Two more skills: wallet watchlist imports with a validator (`chaos run validate_wallet_import`), and EVM read guidance (the pipeline stays Solana-only).
-
 ## 0.1.0 — 2026-10-02 (initial public release)
 
+- 14 skills, including wallet watchlist imports with a validator and EVM read guidance; the pipeline reads Solana only.
 - Releases go to PyPI as `chaos-trader` through trusted publishing: a `vX.Y.Z` tag runs `.github/workflows/publish.yml`, which refuses a tag that differs from the package version, builds the wheel and sdist, and uploads them with no stored token.
 - `chaos wallets --add <address> --tier A|B|C` and `chaos wallets --remove <address>` edit the home roster; they never call the chain and mark the file `user-edited`.
 - The recommendation sentence names the position states a card prints for tokens your own wallets hold, and `docs/smart-wallets.md` names the two caution gate states. `chaos-crypto-trader` answers what the read says and what the paper loop would do, with the paper engine's plan labelled as simulated. `chaos onboard` with fd 0 closed exits 2 with the needs-a-terminal sentence instead of a traceback.
@@ -22,7 +19,7 @@ All notable changes to this package. Dates are UTC.
 - Makefile works with a relative `PY`; macOS temp-path test fix; key-storage wording; 60-second path; PEP 639 license metadata.
 - `chaos run` keeps the caller's working directory, so relative `--roster` and `--out` paths resolve where you are; all of `trading/reports/` is ignored; the data folders are declared to setuptools; wording fixes from the public-release review.
 - Known: the wheel carries the tests under `chaos_trader/trading/scripts/test_*.py`; accepted for 0.1.0.
-- The 12 skills live at the repository root under `skills/blockchain/`; the wheel still carries them.
+- The 14 skills live at the repository root under `skills/blockchain/`; the wheel still carries them.
 - The repository is a Hermes profile distribution (`distribution.yaml`, `SOUL.md`, `config.yaml`, `cron/jobs.json` with three jobs shipped paused), installed with `hermes profile install`. The profile is named `chaos-trader` so the `--alias` wrapper cannot shadow the `chaos` command.
 - `chaos run <script> [args]` runs any pipeline script, job wrapper, or skill helper from the installed package; `chaos run` alone lists them.
 - `chaos onboard` no longer copies code into `CHAOS_HOME`; the home holds state only. `chaos update` refreshes `paper_autopilot.defaults.yaml` and prints the pip command for code updates, which installs from the repository.
@@ -31,7 +28,7 @@ All notable changes to this package. Dates are UTC.
 - Wallet reads on any Solana RPC (`getSignaturesForAddress` + `getTransaction`), rows tagged `solana_rpc`; Helius rows keep `helius_rpc` and both are read together.
 - Token reads, structural gates, candidate tape, paper loop with fees, slippage, and stops.
 - `chaos onboard`, `chaos update`, `chaos skills install --for claude | codex | hermes | all`.
-- 12 skills in `SKILL.md` form, harness-neutral.
+- 14 skills in `SKILL.md` form, harness-neutral.
 - X evidence through `X_SEARCH_PROVIDER` (`hermes`, `xai`, `none`); unsourced answers never change a verdict.
 - Fresh-home behaviour: every command exits 0 with a plain sentence when there is nothing to show.
 - Vendor and owner-name gate by digest; CI with full-history gitleaks and a wheel-content check.
