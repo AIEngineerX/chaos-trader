@@ -232,7 +232,7 @@ class WalletApiErrorSurfacingTests(unittest.TestCase):
     def test_wallet_get_records_failure_instead_of_silent_none(self):
         errors: list[str] = []
         with patch.dict(os.environ, {"HELIUS_API_KEY": "test-key-not-real"}, clear=False), \
-             patch.object(swt.urllib.request, "urlopen", side_effect=OSError("connection refused")):
+             patch.object(swt.no_redirect, "open_no_redirect", side_effect=OSError("connection refused")):
             out = swt.wallet_get("/v1/wallet/W/identity", errors=errors)
         self.assertIsNone(out)
         self.assertEqual(len(errors), 1)

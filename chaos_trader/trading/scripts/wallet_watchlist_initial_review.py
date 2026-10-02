@@ -22,6 +22,7 @@ from typing import Any
 
 from chaos_home import chaos_home  # noqa: E402
 from helius_common import rpc_endpoint  # noqa: E402
+import no_redirect  # noqa: E402
 PROFILE_HOME = chaos_home()
 WATCHLIST = PROFILE_HOME / "trading" / "watchlists" / "wallets.json"
 SECONDARY_WALLETS = PROFILE_HOME / "trading" / "watchlists" / "secondary_wallets.json"
@@ -57,10 +58,14 @@ def rpc_batch(calls: list[dict[str, Any]], *, timeout: int = 45, retries: int = 
     last_error = None
     for attempt in range(retries + 1):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            # The endpoint URL can carry the key, so no redirect is followed: a 3xx raises HTTPError.
+            with no_redirect.open_no_redirect(req, timeout=timeout) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
                 return payload if isinstance(payload, list) else [payload]
         except urllib.error.HTTPError as exc:
+            if 300 <= exc.code < 400:
+                exc.close()
+                raise RuntimeError(f"HTTP {exc.code}: RPC unavailable: redirect refused")
             body_text = exc.read().decode("utf-8", "replace")[:500]
             last_error = f"HTTP {exc.code}: {body_text}"
             if exc.code not in {429, 500, 502, 503, 504} or attempt >= retries:

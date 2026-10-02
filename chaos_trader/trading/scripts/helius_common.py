@@ -19,6 +19,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+import no_redirect
 from chaos_home import chaos_home  # noqa: E402
 PROFILE_HOME = chaos_home()
 ENV_PATH = PROFILE_HOME / ".env"
@@ -165,7 +166,8 @@ def rpc_request(method: str, params: list[Any] | dict[str, Any] | None = None, *
     last_error: Exception | None = None
     for attempt in range(retries + 1):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            # The endpoint URL can carry the key, so no redirect is followed: a 3xx raises HTTPError.
+            with no_redirect.open_no_redirect(req, timeout=timeout) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
             if "error" in payload:
                 raise SystemExit(json.dumps({"ok": False, "method": method, "error": payload["error"]}, indent=2))
@@ -174,6 +176,8 @@ def rpc_request(method: str, params: list[Any] | dict[str, Any] | None = None, *
             last_error = exc
             # The error carries the open response; close it on both paths so no socket is left to the collector.
             try:
+                if 300 <= exc.code < 400:
+                    raise SystemExit(json.dumps({"ok": False, "method": method, "http_status": exc.code, "error": "RPC unavailable: redirect refused"}, indent=2))
                 if exc.code not in {429, 500, 502, 503, 504} or attempt >= retries or method_not_served(exc.code, exc.headers):
                     try:
                         details = exc.read().decode("utf-8")[:1000]

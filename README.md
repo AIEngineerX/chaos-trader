@@ -113,7 +113,7 @@ Six commands read data they do not fill themselves. On a fresh home, four of the
 
 ## Configuration
 
-Everything lives in one folder, `CHAOS_HOME`. Nothing is written anywhere else, except by `chaos skills install`, which writes into the harness skill directories it prints. `CHAOS_HOME/trading/cache/holders/` keeps the last largest-holder sample for each mint and sample size read on a keyed RPC and is safe to delete. The public RPC never fills it, because it does not serve that read. A sample a keyed RPC cached in the last 15 minutes is still used when a later read of that mint fails, including the public RPC's not-served refusal. A file there that does not read as a sample is ignored, and a cache that cannot be written does not fail the read.
+Everything lives in one folder, `CHAOS_HOME`. The `chaos` verbs write only under `CHAOS_HOME` (plus `chaos skills install`, which writes the harness skill folders it prints, and `--force` can replace a same-named skill folder there). Scripts run through `chaos run` default to `CHAOS_HOME` but write wherever their own `--out`/`--db` flags point. `CHAOS_HOME/trading/cache/holders/` keeps the last largest-holder sample for each mint and sample size read on a keyed RPC and is safe to delete. The public RPC never fills it, because it does not serve that read. A sample a keyed RPC cached in the last 15 minutes is still used when a later read of that mint fails, including the public RPC's not-served refusal. A file there that does not read as a sample is ignored, and a cache that cannot be written does not fail the read.
 
 Which commands work on which RPC:
 
@@ -355,7 +355,7 @@ Not in this release. This package labels tokens study, watch, manual-review, or 
 
 ## Security boundary
 
-See `SECURITY.md` and `BOUNDARY.md`. Short version: the code reads public chain data through the RPC you configure, writes only under `CHAOS_HOME` except for `chaos skills install`, which writes into the harness skill directories it prints, and never stores wallet keys, signer material, seed phrases, or transaction-authority secrets. Optional API credentials such as Helius or xAI keys live only in your local `CHAOS_HOME/.env`. The optional GMGN cross-check, off by default, also reads `GMGN_API_KEY` from `~/.config/gmgn/.env` when the variable is unset. Do not put a funded keypair anywhere this package can read until the executor release says how.
+See `SECURITY.md` and `BOUNDARY.md`. Short version: the code reads public chain data through the RPC you configure and never stores wallet keys, signer material, seed phrases, or transaction-authority secrets. The `chaos` verbs write only under `CHAOS_HOME` (plus `chaos skills install`, which writes the harness skill folders it prints, and `--force` can replace a same-named skill folder there). Scripts run through `chaos run` default to `CHAOS_HOME` but write wherever their own `--out`/`--db` flags point. Optional API credentials such as Helius or xAI keys live only in your local `CHAOS_HOME/.env`. The optional GMGN cross-check, off by default, also reads `GMGN_API_KEY` from `~/.config/gmgn/.env` when the variable is unset. Do not put a funded keypair anywhere this package can read until the executor release says how.
 
 ## License
 

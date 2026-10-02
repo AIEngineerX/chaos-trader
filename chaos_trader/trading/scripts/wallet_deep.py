@@ -15,6 +15,7 @@ import urllib.request
 from collections import Counter
 from typing import Any
 
+import no_redirect
 from helius_common import WALLET_API_BASE as BASE_URL, require_address, safe_print, wallet_api_key
 
 try:
@@ -43,10 +44,14 @@ def wallet_get(path: str, params: dict[str, Any] | None = None, *, timeout: int 
     last_status: int | None = None
     for attempt in range(retries + 1):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            # The URL carries the key, so no redirect is followed: a 3xx raises HTTPError.
+            with no_redirect.open_no_redirect(req, timeout=timeout) as resp:
                 return json.loads(resp.read().decode("utf-8")), None, resp.status
         except urllib.error.HTTPError as exc:
             last_status = exc.code
+            if 300 <= exc.code < 400:
+                exc.close()
+                return None, "Wallet API unavailable: redirect refused", exc.code
             try:
                 body = exc.read().decode("utf-8", "replace")[:1000]
             except Exception:

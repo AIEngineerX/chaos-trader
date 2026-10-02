@@ -51,6 +51,17 @@ RPC_URL = os.environ.get(
     "https://api.mainnet-beta.solana.com",
 )
 
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+# SOLANA_RPC_URL can carry a provider key in its query string, so RPC calls never follow a redirect:
+# a 3xx raises HTTPError instead of re-sending the request to the new location.
+_RPC_OPENER = urllib.request.build_opener(_NoRedirect)
+
 LAMPORTS_PER_SOL = 1_000_000_000
 
 # The newest transaction version a full-transaction read asks for. Mainnet serves v1 transactions, and an RPC
@@ -139,7 +150,7 @@ def _rpc_call(method: str, params: list = None, retries: int = 2, version_retry:
             headers={"Content-Type": "application/json"}, method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with _RPC_OPENER.open(req, timeout=20) as resp:
                 body = json.load(resp)
             if "error" in body:
                 err = body["error"]
@@ -155,6 +166,9 @@ def _rpc_call(method: str, params: list = None, retries: int = 2, version_retry:
                 sys.exit(f"RPC error: {err}")
             return body.get("result")
         except urllib.error.HTTPError as exc:
+            exc.close()
+            if 300 <= exc.code < 400:
+                sys.exit(f"RPC unavailable: redirect refused (HTTP {exc.code})")
             if exc.code == 429 and attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
                 continue
@@ -181,9 +195,12 @@ def rpc_batch(calls: list) -> list:
             headers={"Content-Type": "application/json"}, method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with _RPC_OPENER.open(req, timeout=20) as resp:
                 return json.load(resp)
         except urllib.error.HTTPError as exc:
+            exc.close()
+            if 300 <= exc.code < 400:
+                sys.exit(f"RPC unavailable: redirect refused (HTTP {exc.code})")
             if exc.code == 429 and attempt < 2:
                 time.sleep(1.5 * (attempt + 1))
                 continue

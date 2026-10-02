@@ -36,7 +36,7 @@ class HolderRateLimitTests(unittest.TestCase):
 
         patches = [
             mock.patch.dict(os.environ, {"SOLANA_RPC_URL": "https://api.mainnet-beta.solana.com", "HELIUS_API_KEY": ""}),
-            mock.patch.object(helius_common.urllib.request, "urlopen", side_effect=rate_limited),
+            mock.patch.object(helius_common.no_redirect, "open_no_redirect", side_effect=rate_limited),
             mock.patch.object(helius_common.time, "sleep"),
             # The public RPC host is checked by DNS; answer that check here so the tests run with DNS down.
             mock.patch.object(helius_common, "_host_is_private_or_reserved", return_value=False),

@@ -31,7 +31,7 @@ class UnresolvedConcentrationTests(unittest.TestCase):
         cache = tempfile.TemporaryDirectory()
         self.addCleanup(cache.cleanup)
         with mock.patch.dict(os.environ, {"SOLANA_RPC_URL": "https://api.mainnet-beta.solana.com", "HELIUS_API_KEY": ""}), \
-             mock.patch.object(helius_common.urllib.request, "urlopen", side_effect=rate_limited), \
+             mock.patch.object(helius_common.no_redirect, "open_no_redirect", side_effect=rate_limited), \
              mock.patch.object(helius_common.time, "sleep"), \
              mock.patch.object(holder_resolver, "_sleep"), \
              mock.patch.object(holder_resolver, "HOLDER_CACHE", Path(cache.name)), \

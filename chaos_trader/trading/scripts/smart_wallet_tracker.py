@@ -12,6 +12,7 @@ import json
 import sqlite3
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
@@ -20,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import no_redirect
 from helius_common import WALLET_API_BASE as HELIUS_WALLET_API, is_helius_endpoint, require_address, rpc_request, rpc_tx_request, wallet_api_key
 
 from chaos_home import chaos_home  # noqa: E402
@@ -71,8 +73,15 @@ def wallet_get(path: str, params: dict[str, Any] | None = None, timeout: int = 3
     url = f"{HELIUS_WALLET_API}{path}?{urllib.parse.urlencode(query)}"
     req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "ChaosReadOnly/1.0"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        # The URL carries the key, so no redirect is followed: a 3xx raises HTTPError.
+        with no_redirect.open_no_redirect(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        exc.close()
+        if errors is not None:
+            reason = "unavailable: redirect refused" if 300 <= exc.code < 400 else str(exc)[:200]
+            errors.append(f"{path}: HTTPError: {reason}")
+        return None
     except Exception as exc:
         if errors is not None:
             errors.append(f"{path}: {type(exc).__name__}: {str(exc)[:200]}")

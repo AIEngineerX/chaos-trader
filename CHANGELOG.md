@@ -21,6 +21,7 @@ All notable changes to this package. Dates are UTC.
 - SECURITY.md is a policy (reporting, supported versions, what is stored); one statement of what the package recommends, used everywhere; CONTRIBUTING matches the gates.
 - The home roster is a watch source for token reads (A and B count as quality hits, C as scout); the promoter's candidate and sensor verdicts count too.
 - Seed roster v2: nine live wallets. `chaos wallets --review` reports each roster wallet's last activity and track record from the local database. README gains Keeping it current.
+- A key in a request URL never follows an HTTP redirect either: the RPC client, the Helius Wallet API reads in `wallet_deep` and wallet discovery, the watchlist review's batch RPC, and the Solana skill helper refuse every 3xx and report `unavailable: redirect refused` without the key.
 - Bearer tokens no longer follow HTTP redirects (signal API, xAI); the safety check scans journal directories; build requires setuptools 83 or newer.
 - Known: `alpha_intake_local.py` prints source names and raw note text from your own imported export. The output stays on your machine.
 - Makefile works with a relative `PY`; macOS temp-path test fix; key-storage wording; 60-second path; PEP 639 license metadata.

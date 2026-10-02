@@ -1,4 +1,4 @@
-"""A Bearer token never follows a redirect. Two real HTTP servers on loopback, no network.
+"""A Bearer token or a key in the URL never follows a redirect. Two real HTTP servers on loopback, no network.
 
 Server A answers every request with a redirect to server B; server B records the Authorization
 header of every request it gets. Through no_redirect.open_no_redirect the redirect raises
@@ -8,15 +8,21 @@ bug the handler is there for.
 from __future__ import annotations
 
 import inspect
+import json
 import os
 import threading
 import unittest
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from unittest import mock
 
+import helius_common
 import no_redirect
 import smart_money_signal_client
+import smart_wallet_tracker
+import wallet_deep
+import wallet_watchlist_initial_review
 import x_provider
 
 TOKEN_HEADER = "Bearer secret"
@@ -114,8 +120,93 @@ class OpenNoRedirectTests(TwoServerCase):
         self.assertEqual(received, [TOKEN_HEADER])
 
 
+KEY = "keyed-url-secret-not-real"
+
+
+def path_recorder() -> tuple[type[BaseHTTPRequestHandler], list[str]]:
+    """Server B for keyed URLs: records each request's path and query and answers 200."""
+    received: list[str] = []
+
+    class Recorder(_QuietHandler):
+        def do_GET(self):
+            received.append(self.path)
+            body = b'{"ok": true}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        do_POST = do_GET
+
+    return Recorder, received
+
+
+class KeyedUrlRedirectTests(TwoServerCase):
+    """A key in the query string never follows a redirect. Server A 302s every `?api-key=` request to server B,
+    with the key in the Location as a hostile redirect would put it; B must get nothing.
+
+    The configured RPC must be https and the Wallet API base is a constant, so each test points the client's
+    endpoint at server A; that is the network boundary. Everything after it is the client's own code."""
+
+    def keyed_servers(self) -> tuple[str, list[str]]:
+        handler_b, received = path_recorder()
+        url_b = self.serve(handler_b)
+        url_a = self.serve(redirector(f"{url_b}?api-key={KEY}", 302))
+        return url_a, received
+
+    def test_default_urlopen_sends_the_key_on_to_the_redirect_target_which_is_the_bug(self):
+        url_a, received = self.keyed_servers()
+        with urllib.request.urlopen(f"{url_a}?api-key={KEY}", timeout=5) as response:
+            response.read()
+        self.assertEqual(received, [f"/?api-key={KEY}"])
+
+    def test_rpc_request_refuses_the_redirect(self):
+        url_a, received = self.keyed_servers()
+        with mock.patch.object(helius_common, "rpc_endpoint", return_value=f"{url_a}?api-key={KEY}"):
+            with self.assertRaises(SystemExit) as caught:
+                helius_common.rpc_request("getBalance", ["So11111111111111111111111111111111111111112"])
+        out = json.loads(str(caught.exception))
+        self.assertEqual((out["http_status"], out["error"]), (302, "RPC unavailable: redirect refused"))
+        self.assertNotIn(KEY, str(caught.exception))
+        self.assertEqual(received, [])
+
+    def test_wallet_deep_refuses_the_redirect(self):
+        url_a, received = self.keyed_servers()
+        with mock.patch.dict(os.environ, {"HELIUS_API_KEY": KEY}), mock.patch.object(wallet_deep, "BASE_URL", url_a.rstrip("/")):
+            result = wallet_deep.wallet_get("/v1/wallet/W/identity")
+        self.assertEqual(result, (None, "Wallet API unavailable: redirect refused", 302))
+        self.assertEqual(received, [])
+
+    def test_wallet_discovery_refuses_the_redirect(self):
+        url_a, received = self.keyed_servers()
+        errors: list[str] = []
+        with mock.patch.dict(os.environ, {"HELIUS_API_KEY": KEY}), \
+             mock.patch.object(smart_wallet_tracker, "HELIUS_WALLET_API", url_a.rstrip("/")):
+            result = smart_wallet_tracker.wallet_get("/v1/wallet/W/identity", errors=errors)
+        self.assertIsNone(result)
+        self.assertEqual(errors, ["/v1/wallet/W/identity: HTTPError: unavailable: redirect refused"])
+        self.assertEqual(received, [])
+
+    def test_watchlist_rpc_batch_refuses_the_redirect(self):
+        url_a, received = self.keyed_servers()
+        with mock.patch.object(wallet_watchlist_initial_review, "rpc_endpoint", return_value=f"{url_a}?api-key={KEY}"):
+            with self.assertRaises(RuntimeError) as caught:
+                wallet_watchlist_initial_review.rpc_batch([{"jsonrpc": "2.0", "id": 0, "method": "getSlot", "params": []}])
+        self.assertEqual(str(caught.exception), "HTTP 302: RPC unavailable: redirect refused")
+        self.assertEqual(received, [])
+
+
 class CallSiteWiringTests(unittest.TestCase):
-    """Both Bearer-token clients open their request through open_no_redirect, never urlopen."""
+    """Every client whose request carries a credential, as a Bearer header or as a key in the URL, opens it
+    through open_no_redirect, never urlopen."""
+
+    def test_keyed_url_clients_use_open_no_redirect(self):
+        for module, function in ((helius_common, helius_common.rpc_request), (wallet_deep, wallet_deep.wallet_get),
+                                 (smart_wallet_tracker, smart_wallet_tracker.wallet_get),
+                                 (wallet_watchlist_initial_review, wallet_watchlist_initial_review.rpc_batch)):
+            with self.subTest(function=function.__qualname__, module=module.__name__):
+                self.assert_wired(module, function)
 
     def assert_wired(self, module, function) -> None:
         self.assertIs(module.no_redirect, no_redirect)
