@@ -1,8 +1,9 @@
-"""`chaos mcp`: a stdio MCP server whose read-only tools run the pipeline verbs with `--json`.
+"""`chaos mcp`: a stdio MCP server whose tools run the pipeline verbs with `--json`.
 
 Each tool runs the verb the CLI would run, in the environment the CLI builds, and returns the envelope that
-verb prints, so the CLI and the server share one implementation. Roster edits and the ingest stay on the
-command line.
+verb prints, so the CLI and the server share one implementation. No tool signs, sends, or edits the roster;
+each writes only what its verb writes under CHAOS_HOME (signal ledger rows, report files, the holder cache,
+and for `sweep` the fast-lane rows). Roster edits and the ingest stay on the command line.
 """
 # No `from __future__ import annotations`: mcp 1.12 reads the tool annotations as classes, not strings.
 import re

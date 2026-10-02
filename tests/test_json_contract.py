@@ -14,7 +14,7 @@ ENVELOPE_KEYS = ["schema_version", "command", "generated_at", "data"]
 NO_INGEST_REVIEW = "No ingest yet. Run chaos run chaos_alpha_elite_ingest first."
 SWEEP_FAST = "The roster tape is empty until the ingest job has run. Run the ingest job, or use chaos sweep without --fast for the trending sweep."
 JSON_EXCLUSIVE = "--json cannot be combined with --raw or --render-json; pick one."
-JSON_VERBS = ("sweep", "token", "analyze", "strategy-paper", "smart-signals", "paper-report", "wallets")
+JSON_VERBS = ("sweep", "token", "analyze", "strategy-paper", "smart-signals", "paper-report", "outcomes", "wallets")
 
 
 def strings(value):

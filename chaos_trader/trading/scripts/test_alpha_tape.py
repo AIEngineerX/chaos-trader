@@ -76,6 +76,24 @@ class AlphaTapeTests(unittest.TestCase):
         con.commit()
         con.close()
 
+    def test_wallet_events_stay_fresh_for_one_ingest_interval_plus_5_minutes_and_sweep_rows_for_15(self):
+        with tempfile.TemporaryDirectory() as td:
+            db = Path(td) / "tape.sqlite"
+            self.make_db(db)
+            now = datetime.now(timezone.utc)
+            with closing(sqlite3.connect(db)) as con:
+                con.execute("UPDATE wallet_token_events SET block_time_utc=?", ((now - timedelta(minutes=33)).isoformat(),))
+                con.commit()
+                fresh = alpha_tape.tape_freshness(con)
+                self.assertEqual((fresh["status"], fresh["threshold_seconds"]["wallet_events"]), ("fresh", 35 * 60))
+                con.execute("UPDATE wallet_token_events SET block_time_utc=?", ((now - timedelta(minutes=36)).isoformat(),))
+                con.execute("UPDATE token_signals SET created_at_utc=?", ((now - timedelta(minutes=16)).isoformat(),))
+                con.commit()
+                stale = alpha_tape.tape_freshness(con)
+            self.assertEqual(stale["status"], "stale")
+            self.assertEqual([r.split(":")[0] for r in stale["stale_reasons"]], ["wallet events stale", "token signals stale"])
+            self.assertEqual(stale["threshold_seconds"]["token_signals"], 15 * 60)
+
     def test_token_payload_uses_local_tape_without_dex(self):
         with tempfile.TemporaryDirectory() as td:
             old = (alpha_tape.DB_PATH, alpha_tape.SIGNAL_LEDGER_PATH, alpha_tape.SECONDARY_SUMMARY_PATH, alpha_tape.SECONDARY_SCORE_DIR)

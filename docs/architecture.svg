@@ -90,14 +90,14 @@
   <text class="label" x="402" y="418">Paper book</text><text class="sub" x="402" y="434">paper_autopilot.sqlite · positions, exits</text>
 
   <!-- row 4: outcome tick + reports -->
-  <rect class="node planned" x="660" y="464" width="250" height="46"/>
-  <text class="label" x="672" y="484">Outcome tick  (planned)</text><text class="sub" x="672" y="500">every 5 min · prices each read at 1h/24h/7d</text>
+  <rect class="node built" x="660" y="464" width="250" height="46"/>
+  <text class="label" x="672" y="484">Outcome tick</text><text class="sub" x="672" y="500">every 5 min · marks each read 15m to 7d after</text>
 
   <rect class="node built" x="390" y="464" width="250" height="46"/>
   <text class="label" x="402" y="484">Reports</text><text class="sub" x="402" y="500">paper-report · calibration · blockers</text>
 
-  <rect class="node planned" x="390" y="530" width="520" height="46"/>
-  <text class="label" x="402" y="550">Scoreboard  (planned)</text><text class="sub" x="402" y="566">chaos outcomes · hit rate per label · nothing shown below 20 reads</text>
+  <rect class="node built" x="390" y="530" width="520" height="46"/>
+  <text class="label" x="402" y="550">Scoreboard</text><text class="sub" x="402" y="566">chaos outcomes · hit rate per label · nothing shown below 20 reads</text>
 
   <!-- boundary wall -->
   <rect class="wall" x="390" y="600" width="520" height="110" rx="8"/>
@@ -108,10 +108,10 @@
 
   <!-- SURFACES -->
   <rect class="node built" x="990" y="140" width="350" height="46"/>
-  <text class="label" x="1002" y="160">chaos CLI · MCP server (chaos mcp)</text><text class="sub" x="1002" y="176">onboard · token · sweep · paper · paper-report · wallets · skills</text>
+  <text class="label" x="1002" y="160">chaos CLI · MCP server (chaos mcp)</text><text class="sub" x="1002" y="176">onboard · token · sweep · outcomes · paper-report · wallets</text>
 
   <rect class="node built" x="990" y="206" width="350" height="62"/>
-  <text class="label" x="1002" y="226">Agent skills (12 SKILL.md)</text><text class="sub" x="1002" y="242">chaos skills install --for claude | codex | hermes | all</text><text class="sub" x="1002" y="258">Claude Code · Codex · Hermes read the same folder format</text>
+  <text class="label" x="1002" y="226">Agent skills (14 SKILL.md)</text><text class="sub" x="1002" y="242">chaos skills install --for claude | codex | hermes | all</text><text class="sub" x="1002" y="258">Claude Code · Codex · Hermes read the same folder format</text>
 
   <rect class="node optional" x="990" y="288" width="350" height="46"/>
   <text class="label" x="1002" y="308">Chat front-end (your overlay)</text><text class="sub" x="1002" y="324">e.g. Telegram slash commands calling the CLI</text>
@@ -142,8 +142,8 @@
   <path class="edge" d="M515,378 L515,398"/>
   <path class="edge" d="M515,444 L515,464"/>
   <path class="edge" d="M660,421 C650,421 650,487 640,487"/>
-  <path class="edge-dim" d="M785,444 L785,464"/>
-  <path class="edge-dim" d="M785,510 L785,530"/>
+  <path class="edge" d="M785,444 L785,464"/>
+  <path class="edge" d="M785,510 L785,530"/>
   <path class="edge-dim" d="M515,510 L515,530"/>
   <path class="edge-dim" d="M650,576 L650,600"/>
 

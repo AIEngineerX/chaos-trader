@@ -184,7 +184,12 @@ def max_ts(con: sqlite3.Connection | None, table: str, column: str) -> str | Non
     return str(row[0]) if row and row[0] else None
 
 
-def tape_freshness(con: sqlite3.Connection | None, *, token_signal_max_stale_seconds: int = 15 * 60, wallet_event_max_stale_seconds: int = 15 * 60, concentration_max_stale_seconds: int = 60 * 60) -> dict[str, Any]:
+# Wallet events come from the ingest, which runs every 30 minutes, so they stay fresh for one interval plus 5 minutes.
+# Sweep rows (signals, concentration) come from a manual `chaos sweep` and keep the shorter windows.
+WALLET_EVENT_MAX_STALE_SECONDS = 35 * 60
+
+
+def tape_freshness(con: sqlite3.Connection | None, *, token_signal_max_stale_seconds: int = 15 * 60, wallet_event_max_stale_seconds: int = WALLET_EVENT_MAX_STALE_SECONDS, concentration_max_stale_seconds: int = 60 * 60) -> dict[str, Any]:
     latest = {
         "token_signals": max_ts(con, "token_signals", "COALESCE(created_at_utc, first_buy_utc, captured_at_utc)"),
         "wallet_events": max_ts(con, "wallet_token_events", "block_time_utc"),

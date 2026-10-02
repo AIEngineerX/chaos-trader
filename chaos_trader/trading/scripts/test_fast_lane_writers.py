@@ -34,6 +34,7 @@ from smart_wallet_tracker import insert_event, upsert_wallet  # noqa: E402
 MINT_A = "5hiLgyybrAYPpUwNFa38agfZ8iEtnahWKAPixcfspump"
 MINT_B = "AXLmMWkRmSPdPxkuMqAD4nzYBK7QRssNkYZ6RXzLpump"
 MINT_C = "7z8xH9Uv3sUpTaBR1WUkjggKGAMWFQpScKE4mEAwpump"
+WSOL = "So11111111111111111111111111111111111111112"
 WALLETS = ["Wallet1111111111111111111111111111111111111", "Wallet2222222222222222222222222222222222222"]
 
 
@@ -184,7 +185,13 @@ class SweepFillsTheFastLanesTests(unittest.TestCase):
     @staticmethod
     def market(chain: str, mint: str, cache: bool = True):
         liquidity = {MINT_A: 80_000.0, MINT_B: 60_000.0, MINT_C: 1_000.0}[mint]
-        return {"pair_count": 1, "summary": {"marketCap": liquidity * 3, "liquidity_usd": liquidity, "volume_h1": liquidity / 2, "txns_h1": {"buys": 40, "sells": 20}}}
+        symbol = {MINT_A: "ALPHA", MINT_B: "BETA", MINT_C: "GAMMA"}[mint]
+        # MINT_B sits on the quote side of its pair, as a token paired against itself sometimes does on DexScreener.
+        sides = {"baseToken": {"address": mint, "symbol": symbol}, "quoteToken": {"address": WSOL, "symbol": "SOL"}}
+        if mint == MINT_B:
+            sides = {"baseToken": {"address": WSOL, "symbol": "SOL"}, "quoteToken": {"address": mint, "symbol": symbol}}
+        return {"pair_count": 1, "pairs": [sides],
+                "summary": {"marketCap": liquidity * 3, "liquidity_usd": liquidity, "volume_h1": liquidity / 2, "txns_h1": {"buys": 40, "sells": 20}}}
 
     def test_after_one_ingest_and_one_sweep_the_fast_lanes_are_not_stale(self):
         with tempfile.TemporaryDirectory() as td:
@@ -224,6 +231,11 @@ class SweepFillsTheFastLanesTests(unittest.TestCase):
             verdicts = {c["mint"]: c["gate"]["verdict"] for c in fast_sweep["candidates"]}
             self.assertEqual(set(verdicts), {MINT_A, MINT_B})
             self.assertNotIn("stale-tape", verdicts.values())
+            self.assertEqual(home.rows("SELECT mint,symbol FROM tokens WHERE mint IN (?,?) ORDER BY mint", (MINT_A, MINT_B)), [(MINT_A, "ALPHA"), (MINT_B, "BETA")])
+            card = alpha_tape.render_sweep(fast_sweep)
+            self.assertIn("**$ALPHA**", card)
+            self.assertIn("**$BETA**", card)
+            self.assertNotIn("$UNKNOWN", card)
 
 
 if __name__ == "__main__":

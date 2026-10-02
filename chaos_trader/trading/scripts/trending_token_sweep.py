@@ -181,6 +181,16 @@ def compact_filtered_read(read: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def token_symbol(pairs: list[dict[str, Any]], mint: str) -> str | None:
+    """The mint's own symbol from DexScreener's pairs, whichever side of the pair it sits on."""
+    for pair in pairs:
+        for side in ("baseToken", "quoteToken"):
+            token = pair.get(side) or {}
+            if token.get("address") == mint and token.get("symbol"):
+                return token["symbol"]
+    return None
+
+
 def enrich(candidates: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
     rows = []
     for c in candidates[: max(limit * 3, limit)]:
@@ -189,16 +199,19 @@ def enrich(candidates: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]
             dex = fetch_token("solana", mint, cache=True)
             summary = dex.get("summary") or {}
             pair_count = dex.get("pair_count")
+            symbol = token_symbol(dex.get("pairs") or [], mint)
             err = None
         except Exception as exc:
             summary = {}
             pair_count = 0
+            symbol = None
             err = str(exc)
         boost_score = float(c.get("boost_total_amount") or 0) * 3 + float(c.get("boost_amount") or 0)
         source_score = len(set(c.get("sources") or [])) * 25
         score = market_score(summary) + boost_score + source_score
         rows.append({
             "mint": mint,
+            "symbol": symbol,
             "sources": sorted(set(c.get("sources") or [])),
             "discovery_url": c.get("url"),
             "boost_total_amount": c.get("boost_total_amount"),

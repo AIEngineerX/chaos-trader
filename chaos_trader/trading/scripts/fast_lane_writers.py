@@ -98,6 +98,8 @@ def write_concentration(con: sqlite3.Connection, mint: str, holders: dict[str, A
         "unknown_pct": holders.get("unknown_pct"),
     }
     values = (holders.get("adjusted_discretionary_pct"), market_cap, now.isoformat(timespec="seconds"), SWEEP_SOURCE_ID, json.dumps(metadata, sort_keys=True))
+    # Deduped here, not by a unique index: the bucket lives in metadata_json, and adding a unique index to the
+    # schema would make opening a database that already holds a duplicate row fail.
     existing = con.execute(
         "SELECT id FROM token_concentration_snapshots WHERE mint=? AND json_extract(metadata_json,'$.writer')='sweep' AND json_extract(metadata_json,'$.bucket')=?",
         (mint, bucket),
@@ -136,7 +138,7 @@ def write_ranked(
         for rank, candidate in enumerate(ranked, 1):
             mint = candidate["mint"]
             summary = candidate.get("summary") or {}
-            upsert_token(con, mint, market_cap=summary.get("marketCap"))
+            upsert_token(con, mint, symbol=candidate.get("symbol"), market_cap=summary.get("marketCap"))
             write_signal(con, rank, candidate, now=now, bucket=bucket)
             holders = holder_func(mint)
             holder_data[mint] = str(holders.get("holder_data") or "live")

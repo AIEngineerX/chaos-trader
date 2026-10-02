@@ -37,7 +37,8 @@ USAGE = """chaos-trader
   chaos token <mint> | sweep | analyze token <mint> | paper-report | outcomes | wallets | help
       run the pipeline commands; `chaos help` lists them
   chaos mcp
-      serve seven read-only tools over these commands to an MCP agent on stdio; needs the mcp extra
+      serve seven tools over these commands to an MCP agent on stdio; no tool signs, sends, or edits
+      the roster, and each writes only what its command writes under CHAOS_HOME; needs the mcp extra
   chaos --version
 """
 
@@ -159,7 +160,7 @@ def _run_pipeline(argv: list[str]) -> int:
 
 def _mcp(argv: list[str]) -> int:
     import argparse
-    argparse.ArgumentParser(prog="chaos mcp", description="Serve the read-only pipeline tools to an MCP agent on stdio.").parse_args(argv)
+    argparse.ArgumentParser(prog="chaos mcp", description="Serve the pipeline tools to an MCP agent on stdio. No tool signs, sends, or edits the roster.").parse_args(argv)
     try:
         import mcp  # noqa: F401
     except ImportError:
