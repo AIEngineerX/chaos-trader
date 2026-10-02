@@ -50,17 +50,20 @@ def env() -> dict[str, str]:
 
 
 def run_raw(args: list[str], timeout: int = 360) -> dict[str, Any]:
-    proc = subprocess.run(
-        [PY, *args, "--raw"],
-        cwd=str(SCRIPT_DIR),
-        env=env(),
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-        timeout=timeout,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            [PY, *args, "--raw"],
+            cwd=str(SCRIPT_DIR),
+            env=env(),
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        raise SystemExit(f"☄️ Chaos command timed out after {timeout}s. Raise --timeout, or check the RPC.")
     if proc.returncode != 0:
         msg = (proc.stderr or proc.stdout or "unknown error").strip()
         raise SystemExit(f"☄️ Chaos command failed\n{msg[:1200]}")
@@ -288,6 +291,8 @@ def compact_token(payload: dict[str, Any], *, include_artifact: bool = False, mo
     ]
     if payload.get("holder_data"):
         lines.append(f"HOLDERS: {payload['holder_data']}")
+    elif payload.get("token_scan_error") or payload.get("pumpfun_error"):
+        lines.append("CHAIN: unavailable (on-chain reads failed; see the saved JSON)")
     if position.get("owner_exposed"):
         lines.append(f"OWNER: {owner_hits}/{owner_count} · {owner_value} · {owner_pct_text}")
     if delta.get("useful"):
@@ -775,11 +780,14 @@ def cmd_wallets_review(args: argparse.Namespace) -> None:
     if args.days < 1:
         raise SystemExit("--days must be 1 or more.")
     db = Path(args.db).expanduser() if getattr(args, "db", None) else SMART_DB
-    if not db.exists() or not has_completed_ingest(db):
-        print(NO_INGEST_REVIEW)
-        return
-    roster = load_roster(PROFILE_HOME / "trading" / "config" / "roster.json", lenient_tiers=True)
-    rows = roster_review(db, roster["records"], args.days, datetime.now(timezone.utc))
+    try:
+        if not db.exists() or not has_completed_ingest(db):
+            print(NO_INGEST_REVIEW)
+            return
+        roster = load_roster(PROFILE_HOME / "trading" / "config" / "roster.json", lenient_tiers=True)
+        rows = roster_review(db, roster["records"], args.days, datetime.now(timezone.utc))
+    except sqlite3.DatabaseError:
+        raise SystemExit(f"{db} is not a readable SQLite database. Move it aside and run the ingest again.")
     if getattr(args, "raw", False):
         print(json.dumps(rows, indent=2, ensure_ascii=False))
         return

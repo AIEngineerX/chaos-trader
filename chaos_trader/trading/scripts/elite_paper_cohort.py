@@ -35,6 +35,7 @@ PROFILE_HOME = chaos_home()
 DEFAULT_DB = PROFILE_HOME / "trading" / "db" / "alpha_elite_paper.sqlite"
 DEFAULT_REPORT_DIR = PROFILE_HOME / "trading" / "reports" / "alpha_elite_paper"
 SOL_MINT = "So11111111111111111111111111111111111111112"
+NO_INGEST = "No ingest yet. Run chaos run chaos_alpha_elite_ingest first."
 BOUNDARY = "paper/simulated Alpha Elite cohort only; read-only market/onchain inputs; no wallets, signing, orders, routing, swaps, alerts, X, generic radar, legacy paper DB, or execution"
 POLICY = {
     "version": "alpha-elite-paper-v1",
@@ -548,6 +549,9 @@ def main() -> int:
     ap.add_argument("--limit",type=int,default=int(POLICY["max_new_episodes_per_cycle"]))
     ap.add_argument("--raw",action="store_true")
     args=ap.parse_args()
+    if args.command in {"cycle","observe"} and not args.evidence_db.exists():
+        print(NO_INGEST)
+        return 0
     started=now_utc(); con=connect(args.db)
     evidence=None
     try:

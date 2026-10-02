@@ -55,12 +55,16 @@ def run_cycle_once(profile: Path) -> int:
     consumer = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(consumer)
 
+    evidence_path = profile / "trading" / "db" / "smart_wallets.sqlite"
+    if not evidence_path.exists():
+        print(consumer.NO_INGEST)
+        return 0
     started = consumer.now_utc()
     con = consumer.connect(profile / "trading" / "db" / "alpha_elite_paper.sqlite")
     evidence = None
     try:
         roster = consumer.load_roster(consumer.DEFAULT_ROSTER)
-        evidence = consumer.connect_evidence(profile / "trading" / "db" / "smart_wallets.sqlite")
+        evidence = consumer.connect_evidence(evidence_path)
         result = consumer.run_cycle(
             con,
             evidence,

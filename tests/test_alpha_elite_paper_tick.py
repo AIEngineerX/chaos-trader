@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import os
+import sqlite3
 import tempfile
 import unittest
+from contextlib import closing, redirect_stdout
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import Mock
 from unittest.mock import patch
 
+from chaos_trader.onboard import onboard
+
 ROOT = Path(__file__).resolve().parents[1]
+NO_INGEST = "No ingest yet. Run chaos run chaos_alpha_elite_ingest first."
 SCRIPT = ROOT / "chaos_trader" / "jobs" / "chaos_alpha_elite_paper_tick.py"
 SPEC = importlib.util.spec_from_file_location("chaos_alpha_elite_paper_tick", SCRIPT)
 assert SPEC and SPEC.loader
@@ -34,33 +39,42 @@ class AlphaElitePaperTickTests(unittest.TestCase):
             self.assertEqual(0, wrapper.main())
             run.assert_called_once_with(Path(td))
 
-    def test_cycle_uses_fail_closed_roster_defaults_without_duplicate_constants(self) -> None:
-        class Connection:
-            def close(self) -> None:
-                pass
 
-        consumer = SimpleNamespace(
-            DEFAULT_ROSTER=Path("/tmp/roster.json"),
-            now_utc=Mock(return_value="started"),
-            connect=Mock(return_value=Connection()),
-            load_roster=Mock(return_value={"version": "elite-v3"}),
-            connect_evidence=Mock(return_value=Connection()),
-            run_cycle=Mock(return_value={"ok": True}),
-            save_receipt=Mock(return_value="/tmp/receipt.json"),
-            compact=Mock(return_value="ok"),
-        )
+class RealCycleTests(unittest.TestCase):
+    """run_cycle_once against the real cohort on an onboarded home. An empty evidence database needs no network."""
 
-        class Loader:
-            def exec_module(self, module: object) -> None:
-                pass
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.home = onboard(Path(tmp.name) / "home", rpc_url=None, helius_key=None)
+        self.db_dir = self.home / "trading" / "db"
 
-        spec = SimpleNamespace(loader=Loader())
-        with patch.object(wrapper.importlib.util, "spec_from_file_location", return_value=spec), patch.object(
-            wrapper.importlib.util, "module_from_spec", return_value=consumer
-        ), patch("builtins.print"):
-            self.assertEqual(0, wrapper.run_cycle_once(Path("/tmp/profile")))
+    def run_cycle(self) -> tuple[int, str]:
+        out = io.StringIO()
+        with patch.dict(os.environ, {"CHAOS_HOME": str(self.home)}, clear=False), redirect_stdout(out):
+            code = wrapper.run_cycle_once(self.home)
+        return code, out.getvalue()
 
-        consumer.load_roster.assert_called_once_with(consumer.DEFAULT_ROSTER)
+    def test_fresh_home_prints_no_ingest_and_creates_nothing(self) -> None:
+        self.assertFalse((self.db_dir / "smart_wallets.sqlite").exists())
+        code, out = self.run_cycle()
+        self.assertEqual(0, code)
+        self.assertEqual(NO_INGEST, out.strip())
+        self.assertFalse((self.db_dir / "alpha_elite_paper.sqlite").exists())
+        self.assertFalse((self.home / "trading" / "reports" / "alpha_elite_paper").exists())
+
+    def test_cycle_on_a_schema_built_database_writes_a_receipt(self) -> None:
+        with closing(sqlite3.connect(self.db_dir / "smart_wallets.sqlite")) as con:
+            con.executescript((self.db_dir / "smart_wallets_schema.sql").read_text(encoding="utf-8"))
+        code, out = self.run_cycle()
+        self.assertEqual(0, code, out)
+        self.assertTrue(out.startswith("☄️ ALPHA ELITE PAPER · CYCLE"), out)
+        self.assertIn("Observed events 0 · opened 0 · rejected 0", out)
+        receipts = list((self.home / "trading" / "reports" / "alpha_elite_paper").glob("elite_paper_*.json"))
+        self.assertEqual(1, len(receipts))
+        receipt = json.loads(receipts[0].read_text(encoding="utf-8"))
+        self.assertEqual("cycle", receipt["command"])
+        self.assertTrue(receipt["payload"]["ok"])
 
 
 if __name__ == "__main__":

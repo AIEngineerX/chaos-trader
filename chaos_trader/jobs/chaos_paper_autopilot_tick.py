@@ -89,6 +89,8 @@ def main() -> int:
         )
         output = (proc.stdout or proc.stderr).strip()
         print(output or f"☄️ PAPER AUTOPILOT · empty output · exit {proc.returncode}\n{BOUNDARY}")
+        if proc.returncode != 0 and (proc.stderr or "").strip() and proc.stdout.strip():
+            print(proc.stderr.strip(), file=sys.stderr)
         return proc.returncode
 
 

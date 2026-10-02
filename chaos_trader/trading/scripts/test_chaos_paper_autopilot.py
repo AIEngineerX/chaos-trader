@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import io
 import json
 import sqlite3
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -14,6 +16,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+import chaos_paper_autopilot
 from chaos_paper_autopilot import PaperAutopilotRunner, RunnerConfig, coerce_flag, today_utc
 from paper_autopilot_config_check import load_config, validate
 from alpha_tape import EXCLUDED_SWEEP_MINTS
@@ -1426,6 +1429,63 @@ class PaperAutopilotRunnerTests(unittest.TestCase):
             net = sum(p["net_realized_pnl_usd"] for p in payloads)
             self.assertAlmostEqual(fees, 1.875)
             self.assertAlmostEqual(net, 60.625)
+
+
+class PaperAutopilotErrorSurfaceTests(unittest.TestCase):
+    """A tick whose analyses raised must say so: in the discovery event, on the card, and in the exit code."""
+
+    def test_discovery_event_records_tape_errors(self):
+        def unreadable_tape(limit, **kw):
+            payload = sweep_payload_fixture(limit)
+            payload["ok"] = False
+            payload["errors"] = ["smart_wallets.sqlite missing or unreadable"]
+            return payload
+
+        with tempfile.TemporaryDirectory() as td:
+            runner = PaperAutopilotRunner(config_for(Path(td)))
+            with patch("chaos_paper_autopilot.sweep_payload", side_effect=unreadable_tape), runner.connect() as con:
+                runner.discover(con, limit=1)
+                con.commit()
+                payload = json.loads(con.execute("SELECT payload_json FROM events WHERE event_type='discovery'").fetchone()[0])
+            self.assertEqual(payload["tape_errors"], ["smart_wallets.sqlite missing or unreadable"])
+
+    def run_main(self, root: Path, analyze: dict) -> tuple[int, str]:
+        smart_db = root / "smart.sqlite"
+        seed_wallet_event_db(smart_db, run_id="elite-proof", observed_at=datetime.now(timezone.utc) - timedelta(minutes=5), wallets=2)
+        cfg = config_for(root)
+        cfg.raw["paths"]["smart_wallet_sqlite"] = str(smart_db)
+        cfg.raw["boundary"].update(no_swap_links=True, no_live_alerts=True)  # main() loads through the validator
+        config_path = root / "paper_autopilot.yaml"
+        config_path.write_text(json.dumps(cfg.raw), encoding="utf-8")
+        argv = ["chaos_paper_autopilot.py", "--config", str(config_path), "--once", "--limit", "1", "--analyze-top", "1"]
+        out = io.StringIO()
+        with patch.object(sys, "argv", argv), \
+             patch("chaos_paper_autopilot.sweep_payload", side_effect=lambda limit, **kw: sweep_payload_fixture(limit)), \
+             patch.object(PaperAutopilotRunner, "run_analyze", **analyze), \
+             patch.object(PaperAutopilotRunner, "fetch_market", return_value={"price_usd": 0.001, "market_cap": 180_000, "liquidity_usd": 60_000}), \
+             redirect_stdout(out), self.assertRaises(SystemExit) as raised:
+            chaos_paper_autopilot.main()
+        return raised.exception.code, out.getvalue()
+
+    def test_analysis_error_is_counted_on_the_card_and_exits_1(self):
+        with tempfile.TemporaryDirectory() as td:
+            code, card = self.run_main(Path(td), {"side_effect": RuntimeError("analysis child died")})
+            con = sqlite3.connect(Path(td) / "paper.sqlite")
+            try:
+                errors = con.execute("SELECT message FROM events WHERE event_type='deep_analyze_error'").fetchall()
+            finally:
+                con.close()
+        self.assertEqual(code, 1)
+        self.assertIn("Decisions: 1", card.splitlines())
+        self.assertIn("Errors: 1", card.splitlines())
+        self.assertEqual(errors, [("analysis child died",)])
+
+    def test_clean_tick_prints_zero_errors_and_exits_0(self):
+        with tempfile.TemporaryDirectory() as td:
+            code, card = self.run_main(Path(td), {"return_value": source_gap_payload_fixture()})
+        self.assertEqual(code, 0)
+        self.assertIn("Decisions: 1", card.splitlines())
+        self.assertIn("Errors: 0", card.splitlines())
 
 
 if __name__ == "__main__":

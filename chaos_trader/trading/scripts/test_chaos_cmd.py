@@ -83,6 +83,27 @@ class ChaosCommandOutputTests(unittest.TestCase):
         msg = chaos_cmd.compact_token(self.sample_token_payload(), include_artifact=True)
         self.assertIn("Files: `/tmp/token.md`", msg)
 
+    def test_failed_chain_reads_show_on_the_card(self):
+        chain = "CHAIN: unavailable (on-chain reads failed; see the saved JSON)"
+        for key in ("token_scan_error", "pumpfun_error"):
+            with self.subTest(key=key):
+                payload = self.sample_token_payload()
+                payload[key] = "timeout after 75s"
+                self.assertIn(chain, chaos_cmd.compact_token(payload).splitlines())
+        self.assertNotIn(chain, chaos_cmd.compact_token(self.sample_token_payload()))
+        # A holder line already says what failed, so the chain line does not repeat it.
+        payload = self.sample_token_payload()
+        payload.update(token_scan_error="rate limited", holder_data="unavailable (rate limited)")
+        lines = chaos_cmd.compact_token(payload).splitlines()
+        self.assertIn("HOLDERS: unavailable (rate limited)", lines)
+        self.assertNotIn(chain, lines)
+
+    def test_child_timeout_is_one_line_not_a_traceback(self):
+        # A real child that outlives its bound; run_raw appends --raw, which python -c ignores.
+        with self.assertRaises(SystemExit) as raised:
+            chaos_cmd.run_raw(["-c", "import time; time.sleep(30)"], timeout=1)
+        self.assertEqual(str(raised.exception.code), "☄️ Chaos command timed out after 1s. Raise --timeout, or check the RPC.")
+
     def test_markdown_open_rows_ignore_malicious_market_url(self):
         payload = self.sample_token_payload()
         payload["market"]["url"] = "https://evil.example/path"

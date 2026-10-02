@@ -610,7 +610,7 @@ class PaperAutopilotRunner:
                 ),
             )
             discovered.append(row)
-        self.log_event(con, "discovery", message=f"{len(discovered)} candidates", payload={"count": len(discovered), "freshness": payload.get("freshness"), "market_discovery": market_meta})
+        self.log_event(con, "discovery", message=f"{len(discovered)} candidates", payload={"count": len(discovered), "freshness": payload.get("freshness"), "market_discovery": market_meta, "tape_errors": payload.get("errors") or []})
         return discovered
 
     def market_probe_confirmation(self, con: sqlite3.Connection, mint: str) -> dict[str, Any]:
@@ -1742,6 +1742,7 @@ def compact(payload: dict[str, Any]) -> str:
         f"Mode: {payload.get('mode')}",
         f"Discovered: {payload.get('discovered')}",
         f"Decisions: {len(payload.get('decisions') or [])}",
+        f"Errors: {sum(1 for d in payload.get('decisions') or [] if d.get('decision') == 'error')}",
         f"Open positions checked: {payload.get('open_positions_checked')}",
         BOUNDARY,
     ])
@@ -1772,6 +1773,7 @@ def main() -> None:
     else:
         raise SystemExit("Choose --status, --once, or --max-cycles. Continuous loop is not started by default.")
     print(json.dumps(out, indent=2, sort_keys=True, ensure_ascii=False, default=str) if args.raw else compact(out))
+    raise SystemExit(1 if any(d.get("decision") == "error" for d in out.get("decisions") or []) else 0)
 
 
 if __name__ == "__main__":

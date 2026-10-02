@@ -122,6 +122,22 @@ class WalletsReviewTests(unittest.TestCase):
         self.assertEqual(self.run_review().stdout.strip(), NO_INGEST)
         self.assertEqual(self.run_review("--raw").stdout.strip(), NO_INGEST)
 
+    def test_corrupt_database_exits_1_with_one_line(self):
+        self.db.parent.mkdir(parents=True)
+        self.db.write_bytes(bytes(range(256)) * 24)
+        for extra in ((), ("--raw",)):
+            with self.subTest(extra=extra):
+                p = subprocess.run(
+                    [sys.executable, str(SCRIPT_DIR / "chaos_cmd.py"), "wallets", "--review", *extra],
+                    capture_output=True, text=True, encoding="utf-8", env=self.env, timeout=120, check=False,
+                )
+                self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+                self.assertEqual(p.stdout, "")
+                self.assertNotIn("Traceback", p.stderr)
+                self.assertEqual(len(p.stderr.strip().splitlines()), 1, p.stderr)
+                self.assertTrue(p.stderr.strip().endswith(
+                    "smart_wallets.sqlite is not a readable SQLite database. Move it aside and run the ingest again."), p.stderr)
+
     def test_card_labels_each_roster_wallet(self):
         self.build_db()
         lines = self.run_review().stdout.strip().splitlines()

@@ -252,7 +252,7 @@ On Windows, Task Scheduler does the same job. Use the full path to the interpret
 
 If a path contains spaces, wrap it in `\"` inside the `/tr` value. Task Scheduler does not read your shell's `CHAOS_HOME`. Either keep the default home, or run `setx CHAOS_HOME <CHAOS_HOME>` once so tasks inherit it.
 
-The ingest works on any RPC. On the public RPC, which is rate limited, the first fill can stop at the job's 540-second bound with exit 124. The rows already read stay in `smart_wallets.sqlite`. A second run starts again from the first wallet, skips transactions it already stored, and adds only new ones, so it can hit the bound again. For a first fill, use a Helius RPC. Both jobs return the exit code of the script they wrap. The ingest exits 2 when any wallet read fails, so a cron mailer will report it, and 124 when it times out. The paper tick exits non-zero when the autopilot run fails and 124 when it times out; it exits 0 when it skips because a prior tick still holds the lock.
+The ingest works on any RPC. On the public RPC, which is rate limited, the first fill can stop at the job's 540-second bound with exit 124. The rows already read stay in `smart_wallets.sqlite`. A second run starts again from the first wallet, skips transactions it already stored, and adds only new ones, so it can hit the bound again. For a first fill, use a Helius RPC. Both jobs return the exit code of the script they wrap. The ingest exits 2 when any wallet read fails, so a cron mailer will report it, and 124 when it times out. The paper tick exits 1 when any candidate's analysis raised an error, non-zero when the autopilot run fails, and 124 when it times out; it exits 0 when it skips because a prior tick still holds the lock.
 
 ## Keeping it current
 

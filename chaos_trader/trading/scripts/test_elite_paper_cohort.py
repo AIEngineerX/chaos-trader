@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -423,6 +425,24 @@ class ElitePaperCohortTests(unittest.TestCase):
         text = (SCRIPT_DIR / "elite_paper_cohort.py").read_text(encoding="utf-8")
         for forbidden in ("chaos_paper_autopilot", "paper_autopilot.sqlite", "signal_ledger.sqlite", "wallet_adapter", "sign_transaction", "execution_router", "x_search"):
             self.assertNotIn(forbidden, text)
+
+    def test_cycle_and_observe_before_the_first_ingest_print_one_sentence(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            env = {k: v for k, v in os.environ.items() if k not in ("CHAOS_PROFILE_HOME", "HERMES_HOME")}
+            env.update(CHAOS_HOME=str(home), PYTHONIOENCODING="utf-8")
+            paper_db = home / "paper.sqlite"
+            for command in ("cycle", "observe"):
+                with self.subTest(command=command):
+                    p = subprocess.run(
+                        [sys.executable, str(SCRIPT_DIR / "elite_paper_cohort.py"), command,
+                         "--db", str(paper_db), "--evidence-db", str(home / "smart_wallets.sqlite")],
+                        capture_output=True, text=True, encoding="utf-8", env=env, timeout=120, check=False,
+                    )
+                    self.assertEqual(0, p.returncode, p.stdout + p.stderr)
+                    self.assertEqual(paper.NO_INGEST, p.stdout.strip())
+                    self.assertEqual("", p.stderr)
+                    self.assertFalse(paper_db.exists())
 
 
 def tearDownModule() -> None:
