@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -43,14 +44,22 @@ def _home_prefixes() -> list[str]:
 
 
 def scrub_home(value: Any, prefixes: list[str]) -> Any:
-    """Replace the home's absolute path with `$CHAOS_HOME` in every string value."""
+    """Replace the home's absolute path with `$CHAOS_HOME` in every string value and every dict key.
+
+    On Windows the match ignores case, as the file system does, so `c:\\users\\...` is the same home as `C:\\Users\\...`."""
+    if not prefixes:
+        return value  # an empty alternation would match at every position
+    pattern = re.compile("|".join(re.escape(prefix) for prefix in prefixes), re.IGNORECASE if os.name == "nt" else 0)
+    return _scrub(value, pattern)
+
+
+def _scrub(value: Any, pattern: re.Pattern[str]) -> Any:
     if isinstance(value, dict):
-        return {key: scrub_home(item, prefixes) for key, item in value.items()}
+        return {_scrub(key, pattern): _scrub(item, pattern) for key, item in value.items()}
     if isinstance(value, list):
-        return [scrub_home(item, prefixes) for item in value]
+        return [_scrub(item, pattern) for item in value]
     if isinstance(value, str):
-        for prefix in prefixes:
-            value = value.replace(prefix, HOME_TOKEN)
+        return pattern.sub(lambda _match: HOME_TOKEN, value)
     return value
 
 

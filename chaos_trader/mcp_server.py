@@ -14,11 +14,14 @@ from pathlib import Path
 import anyio
 from mcp.server.fastmcp import FastMCP
 
+from chaos_trader import __version__
 from chaos_trader.cli import SCRIPTS, _script_env
 
 # The pattern chaos_cmd.MINT_RE checks; tests/test_mcp_server.py pins the two together.
 MINT_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,88}$")
 NOT_A_MINT = "not a Solana mint address"
+SWEEP_LIMIT = (1, 20)
+REVIEW_DAYS = (1, 365)
 
 
 def _mint(mint: str) -> str:
@@ -26,6 +29,14 @@ def _mint(mint: str) -> str:
     if not MINT_RE.match(mint):
         raise ValueError(NOT_A_MINT)
     return mint
+
+
+def _within(name: str, value: int, bounds: tuple[int, int]) -> str:
+    """An agent's argument outside the bounds is a tool error before any verb starts."""
+    low, high = bounds
+    if not low <= value <= high:
+        raise ValueError(f"{name} must be between {low} and {high}")
+    return str(value)
 
 
 def _x_flag(with_x: bool) -> str:
@@ -48,6 +59,8 @@ def build(home: Path) -> FastMCP:
         return await anyio.to_thread.run_sync(partial(verb, *args))
 
     server = FastMCP("chaos-trader", log_level="WARNING")  # no INFO line per request on the agent's stderr
+    # FastMCP takes no version, and the server it wraps reports the SDK's own when none is set.
+    server._mcp_server.version = __version__
 
     @server.tool()
     async def token_read(mint: str, with_x: bool = False) -> str:
@@ -62,7 +75,7 @@ def build(home: Path) -> FastMCP:
     @server.tool()
     async def sweep(limit: int = 5, fast: bool = False) -> str:
         """Sweep trending Solana tokens, or only the local alpha tape when fast is true, and return the `chaos sweep --json` envelope."""
-        return await run("sweep", "--limit", str(limit), *(["--fast"] if fast else []))
+        return await run("sweep", "--limit", _within("limit", limit, SWEEP_LIMIT), *(["--fast"] if fast else []))
 
     @server.tool()
     async def strategy_paper(mint: str) -> str:
@@ -72,7 +85,7 @@ def build(home: Path) -> FastMCP:
     @server.tool()
     async def wallets_review(days: int = 14) -> str:
         """Return each roster wallet's last activity and track record from the local database as the `chaos wallets --review --json` envelope."""
-        return await run("wallets", "--review", "--days", str(days))
+        return await run("wallets", "--review", "--days", _within("days", days, REVIEW_DAYS))
 
     @server.tool()
     async def paper_report() -> str:

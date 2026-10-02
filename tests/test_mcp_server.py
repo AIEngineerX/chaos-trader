@@ -100,12 +100,16 @@ class McpServerTests(OnboardedHome):
 
     def session(self, *calls):
         """Run the calls in one server session: None lists the tools, (name, arguments) calls one."""
+        return self.session_with_init(*calls)[1]
+
+    def session_with_init(self, *calls):
+        """The `initialize` result and the results of the calls, from one server session."""
         async def go():
             params = StdioServerParameters(command=sys.executable, args=["-m", "chaos_trader.cli", "mcp"], env=self.env, cwd=str(self.tmp))
             async with stdio_client(params) as (read, write):
                 async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    return [await (session.list_tools() if call is None else session.call_tool(call[0], arguments=call[1])) for call in calls]
+                    init = await session.initialize()
+                    return init, [await (session.list_tools() if call is None else session.call_tool(call[0], arguments=call[1])) for call in calls]
         return asyncio.run(go())
 
     def envelope(self, result, command):
@@ -132,6 +136,24 @@ class McpServerTests(OnboardedHome):
         bad, after = self.session(("token_read", {"mint": "not-a-mint"}), ("roster_list", {}))
         self.assertTrue(bad.isError)
         self.assertIn(NOT_A_MINT, bad.content[0].text)
+        self.envelope(after, "wallets --list")
+
+    def test_server_info_names_the_server_and_reports_the_package_version(self):
+        from chaos_trader import __version__
+        init, _ = self.session_with_init()
+        self.assertEqual(init.serverInfo.name, "chaos-trader")
+        self.assertEqual(init.serverInfo.version, __version__)
+
+    def test_arguments_out_of_range_are_tool_errors_and_no_verb_runs(self):
+        before = files_under(self.home)
+        cases = [("sweep", {"limit": 0}, "limit must be between 1 and 20"), ("sweep", {"limit": 21}, "limit must be between 1 and 20"),
+                 ("sweep", {"limit": 100000, "fast": True}, "limit must be between 1 and 20"),
+                 ("wallets_review", {"days": 0}, "days must be between 1 and 365"), ("wallets_review", {"days": 366}, "days must be between 1 and 365")]
+        *results, after = self.session(*[(name, args) for name, args, _ in cases], ("roster_list", {}))
+        for (name, args, message), result in zip(cases, results):
+            self.assertTrue(result.isError, (name, args))
+            self.assertIn(message, result.content[0].text, (name, args))
+        self.assertEqual(files_under(self.home), before)
         self.envelope(after, "wallets --list")
 
     def test_nothing_is_written_outside_the_home(self):

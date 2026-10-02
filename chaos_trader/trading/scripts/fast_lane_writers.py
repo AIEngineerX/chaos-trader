@@ -52,9 +52,9 @@ def roster_buys(con: sqlite3.Connection, mint: str, now: datetime) -> dict[str, 
 
 
 def holder_sample(mint: str) -> dict[str, Any]:
-    """A holder sample cached in the last 15 minutes (the sweep's deep read leaves one), else a live read."""
+    """A top-20 holder sample cached for this mint in the last 15 minutes, else a live read of the top 20."""
     try:
-        return cached_holders(mint) or resolve_holders(mint, HOLDER_LIMIT)
+        return cached_holders(mint, HOLDER_LIMIT) or resolve_holders(mint, HOLDER_LIMIT)
     except SystemExit as exc:
         # A failed RPC read past the largest-accounts call; this mint gets no snapshot, the others still do.
         return {"mint": mint, "holder_data": f"unavailable ({str(exc)[:120]})"}

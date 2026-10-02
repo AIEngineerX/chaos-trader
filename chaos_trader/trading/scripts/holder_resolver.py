@@ -111,26 +111,43 @@ def largest_accounts(mint: str) -> dict[str, Any]:
         _sleep(wait)
 
 
-def _cache_file(mint: str) -> Path:
-    return HOLDER_CACHE / f"{mint}.json"
+def _cache_file(mint: str, limit: int) -> Path:
+    return HOLDER_CACHE / f"{mint}-{limit}.json"
 
 
-def write_cached_holders(result: dict[str, Any]) -> None:
-    """Keep the sample with its UTC read time. Written to a temp file first, so a reader never sees half a file."""
-    path = _cache_file(result["mint"])
-    path.parent.mkdir(parents=True, exist_ok=True)
+def write_cached_holders(result: dict[str, Any]) -> bool:
+    """Keep the sample with its UTC read time. Written to a temp file first, so a reader never sees half a file.
+
+    False when the file could not be written. The cache only helps a later rate-limited read, so a caller goes on."""
+    path = _cache_file(result["mint"], result["limit"])
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps({**result, "fetched_at": datetime.now(timezone.utc).isoformat()}), encoding="utf-8")
-    os.replace(tmp, path)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps({**result, "fetched_at": datetime.now(timezone.utc).isoformat()}), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return False
+    return True
 
 
-def cached_holders(mint: str) -> dict[str, Any] | None:
-    """The cached sample marked `cached <N>m` when it is younger than 15 minutes; otherwise None."""
-    path = _cache_file(mint)
-    if not path.exists():
+def cached_holders(mint: str, limit: int) -> dict[str, Any] | None:
+    """The sample cached for this mint and limit, marked `cached <N>m`, when it is younger than 15 minutes; otherwise None.
+
+    A file that does not read as such a sample (corrupt, hand-edited, or a timestamp without a zone) counts as no
+    cache. A read time in the future, from a clock change, counts as age 0."""
+    try:
+        sample = json.loads(_cache_file(mint, limit).read_text(encoding="utf-8"))
+        fetched = datetime.fromisoformat(sample.pop("fetched_at"))
+        age_s = max(0.0, (datetime.now(timezone.utc) - fetched).total_seconds())
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
-    sample = json.loads(path.read_text(encoding="utf-8"))
-    age_s = (datetime.now(timezone.utc) - datetime.fromisoformat(sample.pop("fetched_at"))).total_seconds()
+    holders = sample.get("holders")
+    if sample.get("mint") != mint or sample.get("limit") != limit or not isinstance(holders, list) or not all(isinstance(h, dict) for h in holders):
+        return None
     if age_s >= CACHE_MAX_AGE_S:
         return None
     return {**sample, "holder_data": f"cached {int(age_s // 60)}m"}
@@ -168,7 +185,7 @@ def resolve_holders(mint: str, limit: int) -> dict[str, Any]:
         largest = largest_accounts(mint)
         supply_res = rpc_request("getTokenSupply", [mint], timeout=30) or {}
     except SystemExit as exc:
-        return cached_holders(mint) or unavailable_holders(mint, limit, exc)
+        return cached_holders(mint, limit) or unavailable_holders(mint, limit, exc)
     supply = float(((supply_res.get("value") or {}).get("uiAmount")) or 0)
     accounts = (largest.get("value") or [])[:limit]
     token_account_addrs = [a.get("address") for a in accounts if a.get("address")]

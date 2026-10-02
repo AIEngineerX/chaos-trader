@@ -113,7 +113,7 @@ Six commands read data they do not fill themselves. On a fresh home, four of the
 
 ## Configuration
 
-Everything lives in one folder, `CHAOS_HOME`. Nothing is written anywhere else, except by `chaos skills install`, which writes into the harness skill directories it prints. `CHAOS_HOME/trading/cache/holders/` keeps the last largest-holder sample for each mint read on a keyed RPC and is safe to delete; the public RPC never fills it, because it does not serve that read.
+Everything lives in one folder, `CHAOS_HOME`. Nothing is written anywhere else, except by `chaos skills install`, which writes into the harness skill directories it prints. `CHAOS_HOME/trading/cache/holders/` keeps the last largest-holder sample for each mint and sample size read on a keyed RPC and is safe to delete. The public RPC never fills it, because it does not serve that read. A sample a keyed RPC cached in the last 15 minutes is still used when a later read of that mint fails, including the public RPC's not-served refusal. A file there that does not read as a sample is ignored, and a cache that cannot be written does not fail the read.
 
 Which commands work on which RPC:
 
@@ -176,7 +176,7 @@ The paper-trading rules are in `CHAOS_HOME/trading/config/paper_autopilot.yaml`.
 
 The defaults and the reason for each are in `docs/why-these-defaults.md`.
 
-Every pipeline verb (`sweep`, `token`, `analyze`, `strategy-paper`, `paper-report`, `smart-signals`, `wallets`) accepts `--json` and prints one envelope: `schema_version`, `command`, `generated_at`, `data`. `--raw` keeps the older unwrapped payload. The schema version changes only when a field's meaning changes. `--json` with `--raw` or `--render-json` exits 2. In the envelope, paths under the home read `$CHAOS_HOME` and the Helius and xAI keys are redacted. Where a verb has nothing to show yet and prints one sentence, `data` is `{"status": ..., "message": "<that sentence>"}` and the exit code stays 0. The status is `no-ingest` for `chaos sweep --fast` and `chaos wallets --review` before the first ingest, and `no-wallet-db` for `chaos wallets --discover` before the wallet database exists. `chaos wallets --add` and `--remove` return `added` or `removed` the same way.
+Every pipeline verb (`sweep`, `token`, `analyze`, `strategy-paper`, `paper-report`, `smart-signals`, `wallets`) accepts `--json` and prints one envelope: `schema_version`, `command`, `generated_at`, `data`. `--raw` keeps the older unwrapped payload. The schema version changes only when a field's meaning changes. `--json` with `--raw` or `--render-json` exits 2. In the envelope, paths under the home read `$CHAOS_HOME` and the Helius and xAI keys are redacted. Where a verb has nothing to show yet and prints one sentence, `data` is `{"status": ..., "message": "<that sentence>"}` and the exit code stays 0. The status is `no-ingest` for `chaos sweep --fast` and `chaos wallets --review` before the first ingest, and `no-wallet-db` for `chaos wallets --discover` before the wallet database exists. `chaos wallets --add` and `--remove` return `added` or `removed` the same way. `chaos wallets --discover --json` prints the envelope with `ok` false and exits 1 when any wallet it enriched failed, as `--raw` does.
 
 ## How it works
 

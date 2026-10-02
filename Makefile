@@ -41,7 +41,7 @@ dep-audit:
 	@if $(PY) -m build --version >/dev/null 2>&1; then \
 		rm -rf .tmp/dep-audit && \
 		$(PY) -m build --wheel --outdir .tmp/dep-audit . >/dev/null && \
-		$(PY) -c "import glob, zipfile; z = zipfile.ZipFile(glob.glob('.tmp/dep-audit/*.whl')[0]); meta = next(n for n in z.namelist() if n.endswith('.dist-info/METADATA')); reqs = [l.split(':', 1)[1].strip() for l in z.read(meta).decode().splitlines() if l.startswith('Requires-Dist:')]; open('.tmp/dep-audit/requirements.txt', 'w').write(''.join(r + '\n' for r in reqs))" && \
+		$(PY) -c "import glob, zipfile; z = zipfile.ZipFile(glob.glob('.tmp/dep-audit/*.whl')[0]); meta = next(n for n in z.namelist() if n.endswith('.dist-info/METADATA')); reqs = [l.split(':', 1)[1].strip() for l in z.read(meta).decode().splitlines() if l.startswith('Requires-Dist:')]; reqs = [r.split(';', 1)[0].strip() if 'extra ==' in r else r for r in reqs]; open('.tmp/dep-audit/requirements.txt', 'w').write(''.join(r + '\n' for r in reqs))" && \
 		$(PY) -m pip_audit --strict --progress-spinner off -r .tmp/dep-audit/requirements.txt; \
 	else \
 		echo "dep-audit: the build package is missing, so this audits the project directory; CI audits the wheel"; \

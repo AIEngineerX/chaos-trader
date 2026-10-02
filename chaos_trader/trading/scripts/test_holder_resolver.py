@@ -92,7 +92,7 @@ class HolderRetryAndCacheTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cache_dir = Path(tmp.name) / "trading" / "cache" / "holders"
-        self.cache_file = self.cache_dir / f"{MINT}.json"
+        self.cache_file = self.cache_dir / f"{MINT}-20.json"
         self.sleeps: list[float] = []
         for patch in (mock.patch.object(holder_resolver, "HOLDER_CACHE", self.cache_dir),
                       mock.patch.object(holder_resolver, "_sleep", self.sleeps.append)):
@@ -170,6 +170,47 @@ class HolderRetryAndCacheTests(unittest.TestCase):
         fresh, _ = self.read([])
         self.assertNotIn("holder_data", fresh)
         self.assertGreater(self.fetched_at(), datetime.fromisoformat(old))
+
+    def test_a_cache_that_cannot_be_written_never_fails_a_read_that_worked(self):
+        holder_resolver.HOLDER_CACHE.parent.mkdir(parents=True)
+        holder_resolver.HOLDER_CACHE.write_text("a file where the cache folder should be", encoding="utf-8")
+        result, _ = self.read([])
+        self.assertNotIn("holder_data", result)
+        self.assertEqual([h["owner"] for h in result["holders"]], list(OWNERS.values()))
+        self.assertEqual(sorted(p.name for p in self.cache_dir.parent.iterdir()), ["holders"])
+
+    def test_a_corrupt_or_hand_edited_cache_is_ignored_and_the_read_says_unavailable(self):
+        live, _ = self.read([])
+        good = json.loads(self.cache_file.read_text(encoding="utf-8"))
+        naive = {**good, "fetched_at": datetime.now().isoformat()}  # no zone: cannot be compared with UTC now
+        other_mint = {**good, "mint": "Other111111111111111111111111111111111111111"}
+        bad_holders = {**good, "holders": "edited"}
+        for text in ("{not json", "", "[1, 2]", json.dumps({k: v for k, v in good.items() if k != "fetched_at"}),
+                     json.dumps({**good, "fetched_at": "yesterday"}), json.dumps(naive), json.dumps(other_mint), json.dumps(bad_holders)):
+            self.cache_file.write_text(text, encoding="utf-8")
+            result, _ = self.read([429, 429, 429, 429])
+            self.assertEqual(result["holder_data"], "unavailable (rate limited)", text)
+            self.assertEqual(result["holders"], [], text)
+        self.cache_file.write_bytes(b"\xff\xfe\x00 not utf-8")
+        self.assertEqual(self.read([429, 429, 429, 429])[0]["holder_data"], "unavailable (rate limited)")
+        refreshed, _ = self.read([])
+        self.assertEqual(refreshed, live)
+        self.assertEqual(json.loads(self.cache_file.read_text(encoding="utf-8"))["mint"], MINT)
+
+    def test_the_cache_is_keyed_by_mint_and_limit(self):
+        self.read([])
+        self.assertEqual(holder_resolver.cached_holders(MINT, 20)["holder_data"], "cached 0m")
+        self.assertIsNone(holder_resolver.cached_holders(MINT, 10))
+        self.serve([429, 429, 429, 429])
+        ten =holder_resolver.resolve_holders(MINT, 10)
+        self.assertEqual(ten["holder_data"], "unavailable (rate limited)")
+        self.assertEqual(sorted(p.name for p in self.cache_dir.iterdir()), [f"{MINT}-20.json"])
+
+    def test_a_read_time_in_the_future_counts_as_age_zero(self):
+        self.read([])
+        self.age_cache(-5)
+        result, _ = self.read([429, 429, 429, 429])
+        self.assertEqual(result["holder_data"], "cached 0m")
 
     def test_a_503_keeps_the_rpc_loop_and_no_resolver_wait(self):
         with mock.patch.object(helius_common.time, "sleep") as rpc_sleep:

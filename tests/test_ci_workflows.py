@@ -2,8 +2,10 @@
 import shlex
 import subprocess
 import sys
+import tempfile
 import tomllib
 import unittest
+import zipfile
 from pathlib import Path
 
 import yaml
@@ -100,7 +102,8 @@ class PublishWorkflowTests(unittest.TestCase):
         self.assertLess(names.index("The tag matches the package version"), names.index("Install the package and run the tests"))
         self.assertLess(names.index("Install the package and run the tests"), names.index("Build the wheel and sdist"))
         # A temp PROFILE keeps the test home out of the tree that python -m build packs.
-        self.assertEqual(test["run"].strip(), 'python -m pip install -e . && make test PROFILE="$RUNNER_TEMP/h"')
+        # The mcp extra is installed so the MCP server tests run in the release build instead of skipping.
+        self.assertEqual(test["run"].strip(), 'python -m pip install -e ".[mcp]" && make test PROFILE="$RUNNER_TEMP/h"')
         self.assertNotIn("continue-on-error", test)
 
 
@@ -123,6 +126,22 @@ class CiWorkflowTests(unittest.TestCase):
         steps = self.workflow["jobs"]["checks"]["steps"]
         install = next(s for s in steps if s.get("name") == "Install package")
         self.assertEqual(install["run"].strip(), 'python -m pip install -e ".[mcp]"')
+
+    def test_the_audit_keeps_an_extras_requirements(self):
+        steps = self.workflow["jobs"]["checks"]["steps"]
+        audit = next(s for s in steps if s.get("name") == "Audit the wheel's dependencies")
+        line = next(l for l in audit["run"].splitlines() if l.startswith("python -c "))
+        python, flag, code = shlex.split(line)
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertIn(code.replace("dist/*.whl", ".tmp/dep-audit/*.whl").replace("$RUNNER_TEMP/wheel-requirements.txt", ".tmp/dep-audit/requirements.txt"), makefile)
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "dist").mkdir()
+            with zipfile.ZipFile(Path(tmp) / "dist" / "chaos_trader-0.1.0-py3-none-any.whl", "w") as wheel:
+                wheel.writestr("chaos_trader-0.1.0.dist-info/METADATA", "Metadata-Version: 2.4\nName: chaos-trader\nRequires-Dist: pyyaml>=6\n"
+                               'Requires-Dist: mcp<2,>=1.12; extra == "mcp"\nProvides-Extra: mcp\n')
+            p = subprocess.run([sys.executable, flag, code.replace("$RUNNER_TEMP", Path(tmp).as_posix())], cwd=tmp, capture_output=True, text=True)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual((Path(tmp) / "wheel-requirements.txt").read_text(), "pyyaml>=6\nmcp<2,>=1.12\n")
 
 
 if __name__ == "__main__":
