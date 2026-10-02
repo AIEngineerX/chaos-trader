@@ -60,7 +60,7 @@ class PublishWorkflowTests(unittest.TestCase):
         self.assertEqual(publish["environment"], "pypi")
         self.assertEqual(publish["needs"], "build")
         uses = [step.get("uses", "") for step in publish["steps"]]
-        self.assertIn("pypa/gh-action-pypi-publish@v1.14.2", uses)
+        self.assertTrue(any(u.startswith("pypa/gh-action-pypi-publish@") for u in uses), uses)
         self.assertFalse(any(step.get("run") for step in publish["steps"]), "the publish job runs no commands")
 
     def test_no_stored_credential_reaches_the_upload(self):
@@ -77,6 +77,31 @@ class PublishWorkflowTests(unittest.TestCase):
         self.assertEqual(upload["with"]["name"], download["with"]["name"])
         self.assertEqual(download["with"]["path"], "dist/")
         self.assertIn("python -m build", "\n".join(s.get("run", "") for s in build_steps))
+
+    def test_every_action_is_pinned_by_commit_sha_with_its_tag_beside_it(self):
+        # These actions run next to an OIDC token that can upload to PyPI, so a moved tag must not change them.
+        uses = [step["uses"] for job in self.jobs.values() for step in job["steps"] if "uses" in step]
+        self.assertEqual(len(uses), 5)
+        for use in uses:
+            self.assertRegex(use, r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$")
+        lines = [line.strip() for line in (WORKFLOWS / "publish.yml").read_text(encoding="utf-8").splitlines() if "uses:" in line]
+        self.assertEqual(len(lines), 5)
+        for line in lines:
+            self.assertRegex(line, r"uses: \S+@[0-9a-f]{40} # v\d+(\.\d+)*$")
+
+    def test_the_build_tool_is_pinned(self):
+        run = "\n".join(s.get("run", "") for s in self.jobs["build"]["steps"])
+        self.assertRegex(run, r"pip install build==\d+\.\d+\.\d+\n")
+
+    def test_the_build_runs_the_tests_before_it_builds(self):
+        steps = self.jobs["build"]["steps"]
+        names = [s.get("name", "") for s in steps]
+        test = steps[names.index("Install the package and run the tests")]
+        self.assertLess(names.index("The tag matches the package version"), names.index("Install the package and run the tests"))
+        self.assertLess(names.index("Install the package and run the tests"), names.index("Build the wheel and sdist"))
+        # A temp PROFILE keeps the test home out of the tree that python -m build packs.
+        self.assertEqual(test["run"].strip(), 'python -m pip install -e . && make test PROFILE="$RUNNER_TEMP/h"')
+        self.assertNotIn("continue-on-error", test)
 
 
 class CiWorkflowTests(unittest.TestCase):

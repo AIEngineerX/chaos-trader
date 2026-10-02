@@ -37,7 +37,7 @@ CI runs the same checks on Python 3.11 and 3.14, then builds the wheel, checks i
 
 ## Rules for code
 
-- Tests use real SQLite files, real files, and the real CLI. They replace what leaves the process: the network (`urlopen`, the no-redirect opener, `rpc_request`, and the paper autopilot's market fetch and analysis subprocess), DNS, the external `gmgn-cli` binary, and clocks. A few stub one in-package step to test its caller alone; keep that rare.
+- Tests use real SQLite files, real files, and the real CLI. They replace what leaves the process: the network (`urlopen`, the no-redirect opener, `rpc_request`, and the paper autopilot's market fetch and analysis subprocess), DNS, the external `gmgn-cli` binary, and clocks. Some tests also stub config switches (`is_helius_endpoint`, `rpc_endpoint`, `load_env`, path constants) and the child processes of the package's own scripts (`subprocess.run` in the job wrappers, `run_raw`, `run_json`). `test_chaos_paper_autopilot.py` and `test_gmgn_token_event_integration.py` stub in-package steps to test their callers alone; do not add more without a reason in the test's docstring.
 - Every new env var gets a row in the README Configuration table; a test checks that.
 - Every new verb goes into `chaos help`; a test checks that too.
 - No new runtime dependency without an issue first. Today there is one: PyYAML.
@@ -57,6 +57,10 @@ CI runs the same checks on Python 3.11 and 3.14, then builds the wheel, checks i
 ## Releases
 
 A release is cut by pushing a `vX.Y.Z` tag: `.github/workflows/publish.yml` builds the wheel and sdist and uploads them to PyPI by trusted publishing. The tag must equal the package version: the workflow refuses to build when the tag without its `v` differs from the version in `pyproject.toml`. `tests/test_distribution.py` keeps `pyproject.toml`, `chaos_trader/__init__.py`, and `distribution.yaml` on the same version.
+
+## Rollback
+
+A bad release is yanked on PyPI (project page, Manage, Releases, Yank), which hides it from `pip install chaos-trader` without breaking pinned installs. Fix forward with a new patch version and tag; never re-upload a version number, because PyPI refuses it. A bad commit on `main` is reverted with `git revert`, not a force-push. Repository history from before the 0.1.0 squash is kept in private git bundles outside the repository.
 
 ## Reporting a security problem
 

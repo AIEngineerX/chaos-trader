@@ -14,7 +14,7 @@ Only the latest 0.1.x release receives fixes.
 
 ## What this package stores
 
-The code never stores wallet keys, signer material, seed phrases, or transaction-authority secrets. Optional API credentials, such as Helius or xAI keys, live only in your local `CHAOS_HOME/.env`. It reads public chain data through the RPC you configure. It writes only under `CHAOS_HOME`, except for `chaos skills install`, which writes into the harness skill directories it prints.
+The code never stores wallet keys, signer material, seed phrases, or transaction-authority secrets. Optional API credentials, such as Helius or xAI keys, live only in your local `CHAOS_HOME/.env`. The optional GMGN cross-check, off by default, also reads `GMGN_API_KEY` from `~/.config/gmgn/.env` when the variable is unset. It reads public chain data through the RPC you configure. It writes only under `CHAOS_HOME`, except for `chaos skills install`, which writes into the harness skill directories it prints.
 
 ## Execution boundary
 

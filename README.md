@@ -274,13 +274,15 @@ Two cron jobs keep the data fresh. The ingest refreshes the stored events and po
 
 The seed roster is a starting set captured on the date in its `captured_at` field. It is not a recommendation.
 
+To go back to an earlier release, install it by its tag: `pip install git+https://github.com/AIEngineerX/chaos-trader@v<version>`. That does not touch `CHAOS_HOME`, so `.env`, the roster, and your paper config stay as they are.
+
 ## Execution
 
 Not in this release. This package labels tokens study, watch, manual-review, or avoid-entry; its paper loop decides enter, wait, or avoid; and for tokens your own wallets hold it reports a position state (hold-core, manage, trim-risk, or exit-watch) that describes risk, not an instruction. It never says buy or sell, and it cannot sign, route, or send. There is no keypair handling and no swap routing. A later release adds a separate executor process that reads an intent file, checks it against a policy file (trade size, daily loss cap, venue allowlist, kill switch), simulates, and only then signs with an isolated keypair you fund yourself. It will ship off by default. Until then the paper loop and its boundary config in `trading/config/paper_autopilot.yaml` are the whole story.
 
 ## Security boundary
 
-See `SECURITY.md` and `BOUNDARY.md`. Short version: the code reads public chain data through the RPC you configure, writes only under `CHAOS_HOME` except for `chaos skills install`, which writes into the harness skill directories it prints, and never stores wallet keys, signer material, seed phrases, or transaction-authority secrets. Optional API credentials such as Helius or xAI keys live only in your local `CHAOS_HOME/.env`. Do not put a funded keypair anywhere this package can read until the executor release says how.
+See `SECURITY.md` and `BOUNDARY.md`. Short version: the code reads public chain data through the RPC you configure, writes only under `CHAOS_HOME` except for `chaos skills install`, which writes into the harness skill directories it prints, and never stores wallet keys, signer material, seed phrases, or transaction-authority secrets. Optional API credentials such as Helius or xAI keys live only in your local `CHAOS_HOME/.env`. The optional GMGN cross-check, off by default, also reads `GMGN_API_KEY` from `~/.config/gmgn/.env` when the variable is unset. Do not put a funded keypair anywhere this package can read until the executor release says how.
 
 ## License
 

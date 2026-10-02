@@ -120,7 +120,7 @@ Tiers come from the roster file and are never recomputed. No score or verdict ch
 
 **The elite paper cohort.** `chaos run elite_paper_cohort cycle` keeps its own book in `alpha_elite_paper.sqlite`. It reads roster wallets' ingest buys that arrived after its cursor; the first run puts the cursor at the newest stored event, so only later buys count. One buy opens an episode. Other roster wallets buying the same mint within 15 minutes are recorded but not required. Among its checks, it rejects a buy older than 45 minutes and a token with under $25,000 of liquidity.
 
-**The paper autopilot.** `chaos run chaos_paper_autopilot_tick` seeds its candidates from the same fast tape. To confirm a candidate through the wallet lane, it reads ingest buys of that mint from the last 45 minutes. Each buy must come from a completed run that recorded a roster version and matching sha256. Each wallet behind those buys must have its own track record in `positions`:
+**The paper autopilot.** `chaos run chaos_paper_autopilot_tick` seeds its candidates from the same fast tape and, with `market_discovery.enabled` (on in the shipped config), up to five DexScreener trending or boosted tokens per tick. To confirm a candidate through the wallet lane, it reads ingest buys of that mint from the last 45 minutes. Each buy must come from a completed run that recorded a roster version and matching sha256. Each wallet behind those buys must have its own track record in `positions`:
 
 - at least 3 clean closed positions,
 - total realized PnL above 0 SOL,
