@@ -272,7 +272,7 @@ def main() -> None:
     ps.add_argument("--limit", type=int, default=20)
     ps.add_argument("--raw", action="store_true")
     ps.add_argument("--ledger", action="store_true",
-                    help="Owner-run: archive pulled signals + record them for calibration")
+                    help="archive pulled signals + record them for calibration")
     pw = sub.add_parser("wallets", help="tracked wallet universe")
     pw.add_argument("--tier", choices=["A", "B", "C"], default=None)
     pw.add_argument("--raw", action="store_true")

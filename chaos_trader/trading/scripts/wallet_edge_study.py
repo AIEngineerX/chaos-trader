@@ -16,12 +16,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from chaos_home import chaos_home
 from helius_common import require_address, rpc_request, safe_print
 
 WSOL = "So11111111111111111111111111111111111111112"
 USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 IGNORE = {WSOL, USDC}
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = chaos_home() / "trading"
 
 
 def iso(ts: int | None) -> str | None:

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Review candidate runners, owner wallet style, and whether discovered runners are real.
+"""Review whether paper-book runner candidates are real by current market data.
 
-Read-only. Uses local paper_autopilot candidates/events, private owner analysis JSON,
-and Dexscreener current market data. No execution.
+Read-only. Uses the paper book's candidates under CHAOS_HOME, current Dexscreener market
+data, and optionally a JSON summary of your own wallets. No execution.
 """
 from __future__ import annotations
 
@@ -17,14 +17,16 @@ from pathlib import Path
 from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-TRADING_ROOT = SCRIPT_DIR.parent
-PAPER_DB = TRADING_ROOT / "db" / "paper_autopilot.sqlite"
-REPORT_DIR = TRADING_ROOT / "reports" / "runner_reality"
 
 if str(SCRIPT_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(SCRIPT_DIR))
 
+from chaos_home import chaos_home  # noqa: E402
 from dexscreener_client import resolve_best_token_market  # noqa: E402
+
+PROFILE_HOME = chaos_home()
+PAPER_DB = PROFILE_HOME / "trading" / "db" / "paper_autopilot.sqlite"
+REPORT_DIR = PROFILE_HOME / "trading" / "reports" / "runner_reality"
 
 
 def jloads(s: Any) -> Any:
@@ -70,6 +72,9 @@ def dex_summary(mint: str) -> dict[str, Any]:
 
 
 def candidate_rows(limit: int) -> list[dict[str, Any]]:
+    # No paper book yet means no candidates; connecting would create an empty file instead.
+    if not PAPER_DB.exists():
+        return []
     con = sqlite3.connect(PAPER_DB)
     con.row_factory = sqlite3.Row
     rows = [dict(r) for r in con.execute("SELECT * FROM candidates ORDER BY updated_at_utc DESC LIMIT ?", (limit,))]
@@ -183,7 +188,7 @@ def owner_patterns(owner_json: Path | None = None) -> dict[str, Any]:
 
 
 def render_md(payload: dict[str, Any]) -> str:
-    lines = ["# Runner Reality + Owner Pattern Review", "", f"Generated: {payload['generated_at_utc']}", "", "> Private owner-analysis. Read-only. No execution.", ""]
+    lines = ["# Runner Reality Review", "", f"Generated: {payload['generated_at_utc']}", "", "> Read-only. No execution.", ""]
     stats = payload["candidate_stats"]
     lines += ["## Runner Reality", "", f"- Candidates checked: **{stats['checked']}**", f"- Real-runner candidates by current marks: **{stats['real_runner_candidates']}**", f"- Sources: `{stats['by_source']}`", ""]
     lines += ["| Symbol | Mint | Source | State | Initial MC | Current MC | Liq | MC x | Runner evidence |", "|---|---|---|---|---:|---:|---:|---:|---|"]
@@ -191,20 +196,20 @@ def render_md(payload: dict[str, Any]) -> str:
         cur = r.get("current") or {}
         lines.append(f"| {r.get('symbol') or ''} | `{r['mint'][:6]}…{r['mint'][-4:]}` | {r.get('source')} | {r.get('state')} | {r.get('initial_market_cap')} | {cur.get('market_cap')} | {cur.get('liquidity_usd')} | {r.get('mc_multiple')} | {', '.join(r.get('runner_evidence') or [])} |")
     owner = payload.get("owner") or {}
-    lines += ["", "## Owner Pattern", "", "| Wallet | Fail % | Mints | Roundtrips | Win % | Approx SOL | Median hold h |", "|---|---:|---:|---:|---:|---:|---:|"]
+    lines += ["", "## Own-Wallet Pattern", "", "| Wallet | Fail % | Mints | Roundtrips | Win % | Approx SOL | Median hold h |", "|---|---:|---:|---:|---:|---:|---:|"]
     for w in owner.get("wallet_summaries") or []:
         lines.append(f"| {w.get('label')} | {w.get('failed_pct')} | {w.get('unique_mints_touched')} | {w.get('roundtrip_mints')} | {w.get('approx_win_rate_on_roundtrips_pct')} | {w.get('approx_realized_sol_sample')} | {w.get('median_hold_hours_sample')} |")
     lines += ["", "## Cross-wallet mints", "", "| Mint | Wallets | Approx SOL | Buys/Sells |", "|---|---:|---:|---:|"]
     for m in (owner.get("cross_wallet_mints") or [])[:15]:
         lines.append(f"| `{m['mint'][:6]}…{m['mint'][-4:]}` | {m['wallet_count']} | {m['approx_pnl_sol']} | {m['buys']}/{m['sells']} |")
-    lines += ["", "## Rules to Test", "", "1. Treat owner wallets as a private style template: fast scalps, multi-wallet overlap, high failed-tx drag.", "2. Mark a runner as real only when current MC/liquidity/volume confirms it; avoid social-only runner claims.", "3. Promote fresh pairs only when source rails converge: pump traction + owner-like timing OR wallet cluster + liquidity.", "4. Penalize candidates resembling owner losses: repeated failed attempts, high concentration, no exit liquidity, or stale multi-wallet overlap."]
+    lines += ["", "## Rules to Test", "", "1. Compare candidates with the own-wallet summary when one is given: hold time, failed-transaction share, and overlap across wallets.", "2. Mark a runner as real only when current MC/liquidity/volume confirms it; avoid social-only runner claims.", "3. Promote fresh pairs only when source rails converge: pump traction + timing seen in the own-wallet summary OR wallet cluster + liquidity.", "4. Penalize candidates that show loss patterns: repeated failed attempts, high concentration, no exit liquidity, or stale multi-wallet overlap."]
     return "\n".join(lines) + "\n"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=80)
-    ap.add_argument("--owner-analysis", type=Path, default=None, help="Optional owner-private analysis JSON outside this source package; content is never packaged.")
+    ap.add_argument("--owner-analysis", type=Path, default=None, help="Optional JSON summary of your own wallets, kept outside the package; its content is never packaged.")
     args = ap.parse_args()
     candidates, stats = review_candidates(args.limit)
     payload = {"ok": True, "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"), "candidate_stats": stats, "candidates": candidates, "owner": owner_patterns(args.owner_analysis), "boundary": "read-only; no execution"}

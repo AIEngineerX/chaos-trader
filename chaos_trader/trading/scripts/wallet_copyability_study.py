@@ -16,7 +16,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
+from chaos_home import chaos_home
+
+ROOT = chaos_home() / "trading"
 DELAYS = [30, 120, 300, 600]
 HORIZONS = [900, 1800, 3600, 7200]
 
