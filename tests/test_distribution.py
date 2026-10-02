@@ -62,11 +62,12 @@ class CronJobTests(unittest.TestCase):
             self.assertEqual(job["schedule"]["kind"], "interval")
             self.assertEqual(job["schedule_display"], job["schedule"]["display"])
 
-    def test_outcome_tick_runs_every_15_minutes(self):
+    def test_outcome_tick_runs_every_5_minutes(self):
+        # A mark counts only within 300 s of its horizon, so a slower tick loses marks for good.
         job = next(j for j in self.jobs if j["id"] == "chaos-outcome-tick")
         self.assertEqual(job["prompt"], "Run `chaos run chaos_outcome_tick` with the terminal tool and reply with the exit code and the last line.")
         self.assertEqual(job["skills"], ["chaos-trade-journal"])
-        self.assertEqual(job["schedule"], {"kind": "interval", "minutes": 15, "display": "every 15m"})
+        self.assertEqual(job["schedule"], {"kind": "interval", "minutes": 5, "display": "every 5m"})
         self.assertTrue((ROOT / "chaos_trader" / "jobs" / "chaos_outcome_tick.py").is_file())
         # Every job record has the same fields.
         self.assertEqual({tuple(j) for j in self.jobs}, {tuple(self.jobs[0])})

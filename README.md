@@ -62,7 +62,7 @@ On a git install of Hermes, its Python is in the `venv` folder of the install di
 
 The model block in the shipped `config.yaml` points at a local OpenAI-compatible server, `http://127.0.0.1:8080/v1`, with a placeholder model name. Run `hermes -p chaos-trader model`, or edit `config.yaml`, to pick a provider. Hermes needs a model with a context window of at least 64K tokens.
 
-The four cron jobs ship paused: the elite ingest every 30 minutes, the paper tick every 5 minutes, the paper report once a day, and the outcome tick every 15 minutes. Each one is a prompt that asks the agent to run one `chaos` command, so every tick is a model call. `hermes -p chaos-trader cron list` hides paused jobs; `hermes -p chaos-trader cron list --all` shows them. Start one with its id:
+The four cron jobs ship paused: the elite ingest every 30 minutes, the paper tick every 5 minutes, the paper report once a day, and the outcome tick every 5 minutes. Each one is a prompt that asks the agent to run one `chaos` command, so every tick is a model call. `hermes -p chaos-trader cron list` hides paused jobs; `hermes -p chaos-trader cron list --all` shows them. Start one with its id:
 
     hermes -p chaos-trader cron resume chaos-paper-tick
 
@@ -307,11 +307,11 @@ Seven job wrappers ship in the package; run each with `chaos run <name>`. Each o
 | `chaos_wallet_discovery_tick` | Runs `chaos wallets --discover 5`. Needs `HELIUS_API_KEY` for the wallet API. |
 | `chaos_outcome_tick` | Marks every read in `signal_ledger.sqlite` whose 15m, 1h, 4h, 24h, 3d, or 7d horizon is due, with DexScreener's price, and writes `trading/state/outcome_tick_last_run` after a clean run. A mark taken more than 5 minutes after its horizon is recorded late and never counted. `chaos outcomes` reads these marks. |
 
-Add the elite ingest and the paper tick to your own cron to keep the tape and the paper book fresh, and the outcome tick so `chaos outcomes` has marks to count. Add `chaos_paper_learning_tick` the same way if you also want the daily paper report, the third job the Hermes profile ships:
+Add the elite ingest and the paper tick to your own cron to keep the tape and the paper book fresh, and the outcome tick so `chaos outcomes` has marks to count. Run the outcome tick every 5 minutes: a mark counts only when it is taken within 300 seconds of its horizon, so a slower tick loses marks for good. Add `chaos_paper_learning_tick` the same way if you also want the daily paper report, the third job the Hermes profile ships:
 
     */30 * * * * CHAOS_HOME=$HOME/.chaos-trader /path/to/your/venv/bin/chaos run chaos_alpha_elite_ingest
     */5  * * * * CHAOS_HOME=$HOME/.chaos-trader /path/to/your/venv/bin/chaos run chaos_paper_autopilot_tick
-    */15 * * * * CHAOS_HOME=$HOME/.chaos-trader /path/to/your/venv/bin/chaos run chaos_outcome_tick
+    */5  * * * * CHAOS_HOME=$HOME/.chaos-trader /path/to/your/venv/bin/chaos run chaos_outcome_tick
 
 Replace `/path/to/your/venv/bin/chaos` with the `chaos` script in the venv you installed chaos-trader into; `which chaos` prints it after you activate the venv. Cron does not activate a venv, so a bare `chaos` may not be found.
 
