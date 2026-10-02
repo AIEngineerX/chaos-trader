@@ -17,6 +17,8 @@ except ImportError:  # Windows dev/test hosts
 BOUNDARY = "read-only repricing; no execution"
 SCRIPTS = Path(__file__).resolve().parents[1] / "trading" / "scripts"
 TIMEOUT_SECONDS = 540
+# One line. The next tick marks what is due now; a mark it reaches more than 5 minutes after its horizon is late.
+SKIPPED = "☄️ OUTCOME TICK · skipped: a prior tick still holds the lock, so no mark was taken this time"
 
 
 def profile_home() -> Path:
@@ -50,7 +52,7 @@ def main() -> int:
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("a+") as lock:
         if not acquire_lock(lock):
-            print(f"☄️ OUTCOME TICK · skipped; prior tick active\n{BOUNDARY}")
+            print(SKIPPED)
             return 0
         env = {**os.environ, "CHAOS_HOME": str(profile), "HERMES_HOME": str(profile)}
         proc = subprocess.run(

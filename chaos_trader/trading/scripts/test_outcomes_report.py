@@ -129,6 +129,39 @@ class OutcomesReportTests(unittest.TestCase):
         early = aggregate(self.db, window="24h", now=DAY + timedelta(hours=30))
         self.assertEqual(1, early["labels"]["watch"]["n"])
 
+    def test_a_first_read_marked_late_or_missing_leaves_that_day_unscored(self):
+        late, missing, ok = "L" * 32, "M" * 32, "K" * 32
+        self.ledger.read(late, "watch", at=DAY, status="missing_late")
+        self.ledger.read(missing, "watch", at=DAY, status="missing", ret=None)
+        self.ledger.read(ok, "watch", at=DAY)
+        for mint in (late, missing, ok):  # later reads the same day, all marked on time
+            self.ledger.read(mint, "watch", at=DAY + timedelta(hours=2))
+        result = self.agg()
+        self.assertEqual(1, result["labels"]["watch"]["n"])
+        self.assertEqual((1, 1), (result["scored_reads"], result["scored_mints"]))
+        self.assertEqual(1, result["not_counted"]["late"])
+        # The next day's first read is on time, so that day counts.
+        self.ledger.read(late, "watch", at=DAY + timedelta(days=1))
+        self.assertEqual(2, self.agg()["labels"]["watch"]["n"])
+
+    def test_labels_beyond_the_six_share_one_line_and_the_card_still_fits(self):
+        for label in ENTRY_LABELS:
+            self.ledger.many(label, 20, ret=-12.5)
+        extra = [f"custom-label-{i:03d}-" + "x" * 40 for i in range(60)]
+        for label in extra:
+            self.ledger.many(label, 20, prefix="X", ret=5.0)
+        result = self.agg()
+        self.assertEqual(66, len(result["labels"]))
+        card = render_card(result, NOW - timedelta(minutes=4))
+        self.assertLess(utf16_units(card), 4096)
+        self.assertIn("OTHER · 60 more labels, 1200 reads; chaos outcomes <label> shows one", card.splitlines())
+        self.assertNotIn(extra[0].upper(), card)
+        for label in ENTRY_LABELS:
+            self.assertIn(f"{label.upper()} · n 20", card)
+        one = render_card({**result, "labels": {extra[0]: result["labels"][extra[0]]}}, None)
+        self.assertIn(f"{extra[0].upper()} · n 20", one)
+        self.assertNotIn("OTHER ·", one)
+
     def test_owner_rows_excluded(self):
         self.ledger.many("watch", 25, prefix="O", kind="owner_position_read")
         self.ledger.many("manage", 25, prefix="O", kind="owner_position_read")

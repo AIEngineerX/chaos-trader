@@ -90,7 +90,8 @@ class OutcomeTickTests(unittest.TestCase):
             self.assertTrue(wrapper.acquire_lock(held))
             p = self.tick()
         self.assertEqual(0, p.returncode, p.stdout + p.stderr)
-        self.assertIn("skipped; prior tick active", p.stdout)
+        self.assertEqual(wrapper.SKIPPED + "\n", p.stdout)
+        self.assertIn("skipped: a prior tick still holds the lock", wrapper.SKIPPED)
         self.assertFalse(self.stamp.exists())
 
 

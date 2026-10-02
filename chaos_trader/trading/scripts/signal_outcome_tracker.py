@@ -32,6 +32,9 @@ WINDOWS = {
     "7d": timedelta(days=7),
 }
 PRIMARY_TOLERANCE_SECONDS = 5 * 60
+# A mint with several reads due in one tick costs one set of three DexScreener calls, so a mark's price can be
+# up to this many seconds older than its check time.
+FETCH_TTL_SECONDS = 60
 LEGACY_WINDOW_LABELS = {"15m", "1h", "4h", "24h"}
 P0_OUTCOME_VERSION_AT = datetime(2026, 7, 25, tzinfo=timezone.utc)
 
@@ -150,7 +153,8 @@ def due_signals(con: sqlite3.Connection, *, limit: int, include_candidates: bool
         lags = [int((checked_at - (ts + delta)).total_seconds()) for _label, delta in windows]
         in_tolerance = [lag for lag in lags if 0 <= lag <= PRIMARY_TOLERANCE_SECONDS]
         if in_tolerance:
-            timely.append((min(in_tolerance), signal))
+            # Seconds left before this read's nearest mark stops counting; the read with the least goes first.
+            timely.append((PRIMARY_TOLERANCE_SECONDS - max(in_tolerance), signal))
         else:
             backlog.append(signal)
     timely.sort(key=lambda item: (item[0], int(item[1]["id"])))
@@ -209,7 +213,7 @@ def track_signal(con: sqlite3.Connection, signal: dict[str, Any], *, dry_run: bo
     # An endpoint that errored proves nothing, so that mark stays `missing` and the run exits 2.
     delisted = fetch_failed = False
     if should_fetch:
-        dex = fetch_token("solana", signal["mint"], cache=True)
+        dex = fetch_token("solana", signal["mint"], cache=True, ttl_seconds=FETCH_TTL_SECONDS)
         summary = dex.get("summary") or {}
         if dex.get("pair_count") == 0:
             fetch_failed = bool(dex.get("errors"))

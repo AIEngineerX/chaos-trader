@@ -3,9 +3,10 @@
 
 Reads `signals JOIN outcomes` from the signal ledger. A mark counts only when the outcome tick took it within
 `PRIMARY_TOLERANCE_SECONDS` of its horizon (`primary_eligible`); a pair gone from DexScreener inside that window
-is a -100% mark. One read counts per (mint, label) per UTC day, the first one. Reads of tokens the user's own
-wallets hold (`owner_position_read`) and unread sweep candidates are never on the card. A label with fewer than
-`MIN_N` reads gets no rate at all.
+is a -100% mark. One read counts per (mint, label) per UTC day: the first one, and when its mark was late or
+missing, that mint and label are not scored that day, since a later read must not stand in for it. Reads of
+tokens the user's own wallets hold (`owner_position_read`) and unread sweep candidates are never on the card.
+A label with fewer than `MIN_N` reads gets no rate at all.
 """
 from __future__ import annotations
 
@@ -93,14 +94,17 @@ def aggregate(db_path: Path, *, window: str, min_n: int = MIN_N, now: datetime |
             not_counted["owner"] += 1
         elif row["verdict"] == UNREAD:
             not_counted["unread"] += 1
-        elif row["outcome_status"] == "missing_late":
+        else:
+            first.setdefault((row["mint"], row["verdict"] or "unknown", read_at.date()), row)
+    # The first read of the day is the one that counts, whatever its mark; a later read never stands in for it.
+    groups: dict[str, list[dict[str, Any]]] = {label: [] for label in ENTRY_LABELS}
+    reads = []
+    for (_mint, label, _day), row in first.items():
+        if row["outcome_status"] == "missing_late":
             not_counted["late"] += 1
         elif row["primary_eligible"]:
-            first.setdefault((row["mint"], row["verdict"] or "unknown", read_at.date()), row)
-    groups: dict[str, list[dict[str, Any]]] = {label: [] for label in ENTRY_LABELS}
-    for (_mint, label, _day), row in first.items():
-        groups.setdefault(label, []).append(row)
-    reads = list(first.values())
+            groups.setdefault(label, []).append(row)
+            reads.append(row)
     return {
         "window": window,
         "min_n": min_n,
@@ -127,14 +131,16 @@ def _ago(when: datetime) -> str:
     return f"{minutes // (24 * 60)} d ago"
 
 
-def _label_order(labels: dict[str, Any]) -> list[str]:
-    return [label for label in ENTRY_LABELS if label in labels] + sorted(set(labels) - set(ENTRY_LABELS))
-
-
 def render_card(result: dict[str, Any], last_run: datetime | None) -> str:
-    """Plain-text card: one block per label, a rate only at `min_n` reads or more, ending with the boundary line."""
+    """Plain-text card: one block per label, a rate only at `min_n` reads or more, ending with the boundary line.
+
+    The six read labels get a block each. Any other labels share one line, so the card stays inside a Telegram
+    message whatever labels the ledger holds; a card asked for one label shows that label in full."""
     window, min_n, labels = result["window"], result["min_n"], result["labels"]
-    scored = [label for label in labels if labels[label]["status"] == "scored"]
+    extra = sorted(set(labels) - set(ENTRY_LABELS))
+    shown = [label for label in ENTRY_LABELS if label in labels] + (extra if len(labels) == 1 else [])
+    folded = [] if len(labels) == 1 else extra
+    scored = [label for label in shown if labels[label]["status"] == "scored"]
     lines = [f"☄️ OUTCOMES · {window} after the read"]
     if not scored:
         lines.append("NO SCORES YET")
@@ -144,7 +150,7 @@ def render_card(result: dict[str, Any], last_run: datetime | None) -> str:
                  f"{PRIMARY_TOLERANCE_SECONDS // 60} minutes of the {window} horizon count.")
     lines.append(f"A label needs {min_n} reads before any rate is shown.")
     lines.append("")
-    for label in _label_order(labels):
+    for label in shown:
         item = labels[label]
         if item["status"] != "scored":
             lines.append(f"{label.upper()} · {item['n']} of {min_n} reads, not scored yet")
@@ -155,6 +161,10 @@ def render_card(result: dict[str, Any], last_run: datetime | None) -> str:
         if item["caught_pct"] is not None:
             rates += f" · caught {item['caught_pct']:.0f}%"
         lines += [f"{label.upper()} · n {item['n']}", rates]
+    if folded:
+        reads = sum(labels[label]["n"] for label in folded)
+        lines.append(f"OTHER · {len(folded)} more label{'s' if len(folded) != 1 else ''}, {reads} reads; "
+                     "chaos outcomes <label> shows one")
     lines.append("")
     if any(labels[label]["caught_pct"] is not None for label in scored):
         lines.append("Caught: a mark of -70% or worse, a pool under $1k, or a pair gone from DexScreener.")
