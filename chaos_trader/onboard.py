@@ -34,9 +34,10 @@ def _write_env(home: Path, rpc_url: str | None, helius_key: str | None, rpc_is_d
     if not env_path.exists():
         lines = ["# Written by `chaos onboard`. Edit by hand any time.", ""]
         lines.extend(f"{k}={v}" for k, v in wanted)
-        env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        if os.name != "nt":
-            os.chmod(env_path, 0o600)
+        # Created already restricted, so the keys are never readable by others, even for a moment.
+        fd = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(lines) + "\n")
         return [f"wrote {env_path} with {', '.join(k for k, _ in wanted) or 'no keys'}"]
     text = env_path.read_text(encoding="utf-8")
     present = {line.split("=", 1)[0].strip().removeprefix("export ").strip() for line in text.splitlines() if "=" in line and not line.lstrip().startswith("#")}

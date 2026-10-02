@@ -31,6 +31,13 @@ class EliteWalletPipelineTests(unittest.TestCase):
         }), encoding="utf-8")
         return path
 
+    def schema_db(self, root: str) -> sqlite3.Connection:
+        """A temp smart-wallet database opened the way the ingest opens it: connect_db runs the shipped
+        schemas/smart_wallets_schema.sql and registers the two RPC sources the run rows point at."""
+        con = elite.connect_db(Path(root) / "smart_wallets.sqlite")
+        self.assertIsNotNone(con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='wallet_token_events'").fetchone())
+        return con
+
     def test_roster_derives_version_and_hash_from_the_loaded_file(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             path = self.roster_file(td)
@@ -197,16 +204,9 @@ class EliteWalletPipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             roster_path = self.roster_file(td)
             roster = elite.load_roster(roster_path)
-            con = sqlite3.connect(":memory:")
-            con.row_factory = sqlite3.Row
-            con.execute(
-                """CREATE TABLE ingestion_runs(
-                run_id TEXT PRIMARY KEY,source_id TEXT,source_path TEXT,source_commit TEXT,
-                started_at TEXT,completed_at TEXT,status TEXT,notes TEXT,row_counts_json TEXT
-                )"""
-            )
+            con = self.schema_db(td)
             try:
-                with mock.patch.object(elite, "upsert_wallet"), mock.patch.object(
+                with mock.patch.object(
                     tracker, "is_helius_endpoint", return_value=True
                 ), mock.patch.object(
                     tracker, "rpc_request", side_effect=SystemExit("rpc unavailable")
@@ -225,6 +225,8 @@ class EliteWalletPipelineTests(unittest.TestCase):
                 self.assertEqual("failed", run["status"])
                 self.assertIn("rpc unavailable", run["row_counts_json"])
                 self.assertEqual("helius_rpc", run["source_id"])
+                # The real upsert ran inside the failed run, which rolls it back.
+                self.assertIsNone(con.execute("SELECT 1 FROM wallets WHERE address=?", (roster["wallets"][0],)).fetchone())
             finally:
                 con.close()
 
@@ -232,16 +234,9 @@ class EliteWalletPipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             roster_path = self.roster_file(td)
             roster = elite.load_roster(roster_path)
-            con = sqlite3.connect(":memory:")
-            con.row_factory = sqlite3.Row
-            con.execute(
-                """CREATE TABLE ingestion_runs(
-                run_id TEXT PRIMARY KEY,source_id TEXT,source_path TEXT,source_commit TEXT,
-                started_at TEXT,completed_at TEXT,status TEXT,notes TEXT,row_counts_json TEXT
-                )"""
-            )
+            con = self.schema_db(td)
             try:
-                with mock.patch.object(elite, "upsert_wallet"), mock.patch.object(
+                with mock.patch.object(
                     tracker, "is_helius_endpoint", return_value=False
                 ), mock.patch.object(
                     tracker, "rpc_request", side_effect=SystemExit("429 rate limited")
@@ -260,6 +255,8 @@ class EliteWalletPipelineTests(unittest.TestCase):
                 self.assertEqual("failed", run["status"])
                 self.assertIn("429 rate limited", run["row_counts_json"])
                 self.assertEqual("solana_rpc", run["source_id"])
+                # The real upsert ran inside the failed run, which rolls it back.
+                self.assertIsNone(con.execute("SELECT 1 FROM wallets WHERE address=?", (roster["wallets"][0],)).fetchone())
             finally:
                 con.close()
 

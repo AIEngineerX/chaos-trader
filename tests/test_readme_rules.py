@@ -33,9 +33,9 @@ SECURITY_HEADINGS = ["# Security", "## Reporting a vulnerability", "## Supported
                      "## Execution boundary", "## Forbidden in the repository", "## Release gate"]
 
 # Every way the package reads a named environment variable: os.environ.get/os.getenv/os.environ[...],
-# the two flag/presence helpers, and the GMGN adapter's copy of the environment (`source.get`).
+# the flag/presence/integer helpers, and the GMGN adapter's copy of the environment (`source.get`).
 ENV_READ = re.compile(
-    r"""(?:os\.environ\.get|os\.getenv|_flag_enabled|_has_env_key|source\.get)\(\s*["']([A-Z][A-Z0-9_]+)["']"""
+    r"""(?:os\.environ\.get|os\.getenv|_flag_enabled|_has_env_key|_int_env|source\.get)\(\s*["']([A-Z][A-Z0-9_]+)["']"""
     r"""|os\.environ\[["']([A-Z][A-Z0-9_]+)["']\]"""
 )
 # smart_money_signal_client.py builds its two names as f"{_ENV_PREFIX}_BASE" and f"{_ENV_PREFIX}_TOKEN".
@@ -64,7 +64,7 @@ def trade_recommendations(text: str) -> list[str]:
 def env_vars_read_by_code() -> set[str]:
     from chaos_trader.home import ENV_PRECEDENCE  # read in a loop, so the regex cannot see them
     names = set(ENV_PRECEDENCE)
-    for path in (ROOT / "chaos_trader").rglob("*.py"):
+    for path in [*(ROOT / "chaos_trader").rglob("*.py"), *(ROOT / "skills").rglob("*.py")]:
         if path.name.startswith("test_"):
             continue
         text = path.read_text(encoding="utf-8")
