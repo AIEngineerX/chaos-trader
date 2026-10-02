@@ -328,6 +328,18 @@ def write_receipt(report_dir: Path, receipt: dict[str, Any]) -> Path:
     return path
 
 
+def ingest_order(con: sqlite3.Connection, wallets: list[str]) -> list[str]:
+    """The roster in the order a run reads it: wallets with no completed ingest first, in roster order, then by
+    oldest last completed ingest. A run the time bound cuts short is followed by one that starts with the
+    wallets it did not reach."""
+    last = {row[0]: row[1] for row in con.execute(
+        "SELECT json_extract(notes,'$.wallet'), MAX(completed_at) FROM ingestion_runs "
+        "WHERE status='completed' AND run_id LIKE 'elite-%' AND json_valid(notes) GROUP BY 1"
+    )}
+    position = {wallet: index for index, wallet in enumerate(wallets)}
+    return sorted(wallets, key=lambda wallet: (wallet in last, last.get(wallet) or "", position[wallet]))
+
+
 def run_ingest(
     roster: dict[str, Any],
     *,
@@ -352,7 +364,7 @@ def run_ingest(
                 history_limit=history_limit,
                 pages=pages,
             )
-            for wallet in roster["wallets"]
+            for wallet in ingest_order(con, roster["wallets"])
         ]
         metrics = metrics_func(con, roster["wallets"], top=10)
     finally:

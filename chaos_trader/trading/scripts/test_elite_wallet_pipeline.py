@@ -194,7 +194,6 @@ class EliteWalletPipelineTests(unittest.TestCase):
                 report_dir=Path(td) / "reports",
                 ingest_func=fake_ingest,
                 metrics_func=lambda _con, _wallets, top: {"events": 1, "distinct_mints": 1, "latest_event_utc": "2026-07-30T00:00:00+00:00", "event_types": {"buy": 1}, "quote_events": 0, "top_mints": []},
-                ensure_func=lambda _con: None,
             )
             self.assertEqual((2, 1, 1), (result["attempted"], result["succeeded"], result["failed"]))
             self.assertEqual(1, result["events_inserted"])

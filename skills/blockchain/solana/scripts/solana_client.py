@@ -22,6 +22,7 @@ Environment:
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -51,6 +52,11 @@ RPC_URL = os.environ.get(
 )
 
 LAMPORTS_PER_SOL = 1_000_000_000
+
+# The newest transaction version a full-transaction read asks for. Mainnet serves v1 transactions, and an RPC
+# refuses any transaction newer than the version asked for.
+MAX_TX_VERSION = 1
+_NAMED_TX_VERSION = re.compile(r'"maxSupportedTransactionVersion"\s*:\s*(\d+)')
 
 # Well-known Solana token names — avoids API calls for common tokens.
 # Maps mint address → (symbol, name).
@@ -107,8 +113,21 @@ def _http_get_json(url: str, timeout: int = 10, retries: int = 2) -> Any:
     return None
 
 
-def _rpc_call(method: str, params: list = None, retries: int = 2) -> Any:
-    """Send a JSON-RPC request with retry on 429 rate-limit."""
+def _named_tx_version(err: Any, params: list) -> Optional[int]:
+    """The newer transaction version an RPC's refusal names, when the request asked for an older one."""
+    config = params[-1] if params and isinstance(params[-1], dict) else {}
+    asked = config.get("maxSupportedTransactionVersion")
+    match = _NAMED_TX_VERSION.search(err.get("message") or "") if isinstance(err, dict) else None
+    if asked is None or match is None or int(match.group(1)) <= asked:
+        return None
+    return int(match.group(1))
+
+
+def _rpc_call(method: str, params: list = None, retries: int = 2, version_retry: bool = True) -> Any:
+    """Send a JSON-RPC request with retry on 429 rate-limit.
+
+    A read that asked for MAX_TX_VERSION and is refused for a newer transaction is asked once more with the version
+    the error names."""
     payload = json.dumps({
         "jsonrpc": "2.0", "id": 1,
         "method": method, "params": params or [],
@@ -129,6 +148,10 @@ def _rpc_call(method: str, params: list = None, retries: int = 2) -> Any:
                     if attempt < retries:
                         time.sleep(1.5 * (attempt + 1))
                         continue
+                named = _named_tx_version(err, params or []) if version_retry else None
+                if named is not None:
+                    retry = [*params[:-1], {**params[-1], "maxSupportedTransactionVersion": named}]
+                    return _rpc_call(method, retry, retries, version_retry=False)
                 sys.exit(f"RPC error: {err}")
             return body.get("result")
         except urllib.error.HTTPError as exc:
@@ -414,7 +437,7 @@ def cmd_tx(args):
     """Full transaction details by signature."""
     result = rpc("getTransaction", [
         args.signature,
-        {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0},
+        {"encoding": "jsonParsed", "maxSupportedTransactionVersion": MAX_TX_VERSION},
     ])
 
     if result is None:
@@ -572,7 +595,7 @@ def cmd_whales(args):
         {
             "encoding": "jsonParsed",
             "transactionDetails": "full",
-            "maxSupportedTransactionVersion": 0,
+            "maxSupportedTransactionVersion": MAX_TX_VERSION,
             "rewards": False,
         },
     ])

@@ -35,7 +35,7 @@ Each wallet gets one row in `ingestion_runs`. Its notes carry the wallet's tier 
 
 A buy or sell gets `medium` confidence only when the transaction touches one non-SOL mint. Every other token row is `low`. SOL-move and failed rows carry no confidence of their own and are stored as `medium`, the default. Positions are then rebuilt per wallet and mint, with realized PnL in SOL matched at average cost. A token transfer, a low-confidence row, or a SOL move inside the position's trade window marks the position contaminated.
 
-The scheduled wrapper, `chaos run chaos_alpha_elite_ingest`, runs the ingest with 50 and 1 and holds a file lock. It stops the ingest at 540 seconds and exits 124. Otherwise it returns the ingest's exit code, which is 2 when any wallet read fails. A run that finds the lock held prints one line and exits 0. The shipped job runs it every 30 minutes, and the fast tape counts its wallet events as fresh for 35 minutes, one interval plus 5.
+The scheduled wrapper, `chaos run chaos_alpha_elite_ingest`, runs the ingest with 50 and 1 and holds a file lock. It stops the ingest at 540 seconds and exits 124. Each run reads the roster's never-ingested wallets first, then the wallets by oldest completed read, using the `ingestion_runs` rows, so a run the bound cuts short is followed by one that starts with the wallets it did not reach. Otherwise it returns the ingest's exit code, which is 2 when any wallet read fails. A run that finds the lock held prints one line and exits 0. The shipped job runs it every 30 minutes, and the fast tape counts its wallet events as fresh for 35 minutes, one interval plus 5.
 
 ## What is stored
 
