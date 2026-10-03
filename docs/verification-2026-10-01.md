@@ -753,3 +753,40 @@ The model named the skill's Fast Routing row "token/CA read", which routes to `c
 | `chaos skills install --for claude --project` writes all 12 skills into an empty project | verified |
 | A headless Claude Code run follows the installed skill to its command and returns the card | verified: exit 0, sweep files written in the throwaway home |
 | Claude Code picks the skill from its registry by name | not verified: the Skill tool was not allowed in this run |
+
+## Round 8 — 2026-10-02: the public release, installed from PyPI and from the public repository
+
+Run after the repository went public and `v0.1.0` was published. The tag ran `.github/workflows/publish.yml` (run 37079193513): the build job checked the tag against both version files, ran the tests, and built the wheel and sdist; the publish job waited for the owner to approve the `pypi` environment, then uploaded through the pending trusted publisher. PyPI lists `chaos-trader` 0.1.0 with `chaos_trader-0.1.0-py3-none-any.whl` and `chaos_trader-0.1.0.tar.gz`.
+
+### 1. `pip install chaos-trader` into an empty venv
+
+Command: `python -m venv $TMP/pypi && $TMP/pypi/Scripts/python -m pip install -q chaos-trader` on Windows, Python 3.14. Exit 0. `pip show` reports version 0.1.0 from `site-packages`.
+
+    CHAOS_HOME=$TMP/home chaos onboard --yes
+    -> wrote $TMP/home/.env with SOLANA_RPC_URL
+    -> chaos-trader is set up in $TMP/home
+    chaos --version
+    -> chaos-trader 0.1.0
+
+From outside the repository (so the import cannot pick up the source tree), the installed package reports 14 skill folders under `chaos_trader/skills/blockchain/` and `importlib.metadata.files` lists no `test_*` module: the wheel carries the skills and no tests, as `tests/test_wheel_contents.py` pins.
+
+### 2. `hermes profile install github.com/AIEngineerX/chaos-trader --alias`
+
+Hermes read the distribution from the public repository, showed the four optional environment variables and the cron warning, and after confirmation reported `Installed 'chaos-trader' v0.1.0` at `<hermes>/profiles/chaos-trader`. `hermes profile list` shows the profile with alias `chaos-trader` and distribution `chaos-trader@0.1.0`. `hermes -p chaos-trader cron list --all` lists `chaos-elite-ingest`, `chaos-paper-tick`, `chaos-paper-report`, and `chaos-outcome-tick`, all paused, and says the gateway is not running. The profile folder holds the 14 skills.
+
+Observed: the git-URL install copies the whole clone into the profile, including its `.git` folder (the local-directory install in Round 5 did the same). The repository is public with the single-root history, so nothing private travels with it; it costs disk space only.
+
+The scratch profile was deleted after the check (`hermes profile delete chaos-trader`, confirmed by name).
+
+### 3. Install lines
+
+After the upload, the README, the skills' Prerequisites block, `chaos update`, and the `chaos mcp` hint switched to `pip install chaos-trader` (commit `46ea80c`); `tests/test_readme_rules.py` now pins those lines and the one remaining git URL for the unreleased `main` branch.
+
+### Round 8 summary
+
+| Claim | Status |
+|---|---|
+| A `v*` tag publishes to PyPI through trusted publishing with an owner approval step | verified: run 37079193513, both files on PyPI |
+| `pip install chaos-trader` in an empty venv installs 0.1.0, onboards a home, ships 14 skills and no tests | verified |
+| `hermes profile install <public git URL> --alias` installs the profile with four paused cron jobs | verified |
+| The git-URL install leaves no `.git` folder in the profile | not the case: the clone's `.git` is copied; harmless on the public history |
