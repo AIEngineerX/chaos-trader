@@ -37,6 +37,9 @@ DEFAULT_REPORT_DIR = PROFILE_HOME / "trading" / "reports" / "alpha_elite_paper"
 SOL_MINT = "So11111111111111111111111111111111111111112"
 NO_INGEST = "No ingest yet. Run chaos run chaos_alpha_elite_ingest first."
 BOUNDARY = "paper/simulated Alpha Elite cohort only; read-only market/onchain inputs; no wallets, signing, orders, routing, swaps, alerts, X, generic radar, legacy paper DB, or execution"
+# Mark statuses for a market that cannot be sold into: the pool is under $1k, or the pair is gone.
+DEAD_MARKS = frozenset({"illiquid", "delisted"})
+SCORED_MARKS = DEAD_MARKS | {"ok"}
 POLICY = {
     "version": "alpha-elite-paper-v1",
     "notional_sol": 1.0,
@@ -388,8 +391,11 @@ def mark_one(episode: dict[str, Any], label: str, horizon: int, checked_at: date
     baseline_token_usd = as_float(episode.get("baseline_token_usd"))
     baseline_token_sol = as_float(episode.get("baseline_token_sol"))
     qty = as_float(episode.get("token_quantity"))
+    raw_token = token.get("raw") or {}
     status = "ok"
-    if token_usd is None or sol_usd is None or token_usd <= 0 or sol_usd <= 0:
+    if raw_token.get("pair_selection_reason") == "no_pairs_found" and not raw_token.get("errors"):
+        status = "delisted"  # every endpoint answered and none listed a pair
+    elif token_usd is None or sol_usd is None or token_usd <= 0 or sol_usd <= 0:
         status = "missing_market"
     elif liquidity is None or liquidity < 1_000:
         status = "illiquid"
@@ -399,9 +405,11 @@ def mark_one(episode: dict[str, Any], label: str, horizon: int, checked_at: date
     gross = qty * token_sol if qty is not None and token_sol is not None else None
     exit_cost = gross * (float(policy["exit_slippage_bps"]) + float(policy["exit_fee_bps"])) / 10_000.0 if gross is not None else None
     net_value = gross - exit_cost if gross is not None and exit_cost is not None else None
+    if status in DEAD_MARKS:
+        net_value = 0.0  # nothing to sell into: the whole notional is lost, whatever the last price
     net_pnl = net_value - float(policy["notional_sol"]) if net_value is not None else None
     net_r = net_pnl / float(policy["risk_unit_sol"]) if net_pnl is not None else None
-    valid = int(status == "ok" and lateness <= int(policy["mark_late_grace_seconds"]))
+    valid = int(status in SCORED_MARKS and lateness <= int(policy["mark_late_grace_seconds"]))
     if status == "ok" and not valid:
         status = "late_mark"
     return {
@@ -496,15 +504,22 @@ def status(con: sqlite3.Connection) -> dict[str, Any]:
     states={str(r[0]):int(r[1]) for r in con.execute("SELECT state,COUNT(*) FROM episodes GROUP BY state")}
     marks={str(r[0]):int(r[1]) for r in con.execute("SELECT window_label,COUNT(*) FROM marks GROUP BY window_label")}
     valid={str(r[0]):int(r[1]) for r in con.execute("SELECT window_label,COUNT(*) FROM marks WHERE calibration_valid=1 GROUP BY window_label")}
-    pnl=con.execute("SELECT COUNT(*),COALESCE(SUM(final_net_pnl_sol),0),COALESCE(SUM(final_net_r),0) FROM episodes WHERE state='CLOSED' AND final_status='ok'").fetchone()
+    # A closed episode is scored when its 24h mark was a sale price or a dead market. A dead one is the whole
+    # notional lost, also for rows an earlier version closed at their last price.
+    pnl=con.execute(
+        "SELECT COALESCE(SUM(final_status='ok'),0),COALESCE(SUM(final_status IN ('illiquid','delisted')),0),"
+        "COALESCE(SUM(final_status NOT IN ('ok','illiquid','delisted')),0),"
+        "COALESCE(SUM(CASE WHEN final_status='ok' THEN final_net_pnl_sol WHEN final_status IN ('illiquid','delisted') THEN -entry_notional_sol END),0),"
+        "COALESCE(SUM(CASE WHEN final_status='ok' THEN final_net_r WHEN final_status IN ('illiquid','delisted') THEN -entry_notional_sol/? END),0) "
+        "FROM episodes WHERE state='CLOSED'",(float(POLICY["risk_unit_sol"]),)).fetchone()
     latest=con.execute("SELECT MAX(checked_at_utc) FROM marks").fetchone()[0]
     db_row = con.execute("PRAGMA database_list").fetchone()
     db_path = str(db_row["file"] or DEFAULT_DB) if isinstance(db_row, sqlite3.Row) else str(db_row[2] or DEFAULT_DB)
     return {
         "ok":integrity=="ok","integrity":integrity,"mode":"paper/simulated","db":db_path,
         "policy":POLICY,"cursor_event_id":get_meta(con,"cursor_event_id"),"cohort_start_event_id":get_meta(con,"cohort_start_event_id"),
-        "episode_states":states,"marks":marks,"valid_marks":valid,"valid_closed":int(pnl[0]),
-        "realized_pnl_sol":float(pnl[1]),"realized_r":float(pnl[2]),"latest_mark_utc":latest,"boundary":BOUNDARY,
+        "episode_states":states,"marks":marks,"valid_marks":valid,"valid_closed":int(pnl[0])+int(pnl[1]),
+        "dead_closed":int(pnl[1]),"unscored_closed":int(pnl[2]),"realized_pnl_sol":float(pnl[3]),"realized_r":float(pnl[4]),"latest_mark_utc":latest,"boundary":BOUNDARY,
     }
 
 
@@ -533,7 +548,7 @@ def run_cycle(con: sqlite3.Connection,evidence: sqlite3.Connection,roster: dict[
 def compact(result: dict[str,Any],command:str)->str:
     s=result if command=="status" else result.get("status") or {}
     states=s.get("episode_states") or {}
-    lines=["☄️ ALPHA ELITE PAPER · "+command.upper(),f"Mode paper/simulated · integrity {s.get('integrity','unknown')}",f"Episodes open {states.get('OPEN',0)} · closed {states.get('CLOSED',0)} · rejected {states.get('REJECTED',0)}",f"Valid closed {s.get('valid_closed',0)} · net {s.get('realized_pnl_sol',0):.6f} SOL · {s.get('realized_r',0):.6f}R"]
+    lines=["☄️ ALPHA ELITE PAPER · "+command.upper(),f"Mode paper/simulated · integrity {s.get('integrity','unknown')}",f"Episodes open {states.get('OPEN',0)} · closed {states.get('CLOSED',0)} · rejected {states.get('REJECTED',0)}",f"Scored closed {s.get('valid_closed',0)} (dead {s.get('dead_closed',0)}) · unscored {s.get('unscored_closed',0)} · net {s.get('realized_pnl_sol',0):.6f} SOL · {s.get('realized_r',0):.6f}R"]
     if command!="status":
         o=result.get("observations") or {}; m=result.get("marking") or {}
         lines.append(f"Observed events {o.get('events_scanned',0)} · opened {o.get('opened',0)} · rejected {o.get('rejected',0)}")

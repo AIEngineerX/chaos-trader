@@ -206,7 +206,16 @@ class OutcomesReportTests(unittest.TestCase):
         self.ledger.many("avoid-entry", 5, status="non_exitable", ret=-20.0)
         self.ledger.many("avoid-entry", 15, prefix="K", ret=-20.0)
         avoid = self.agg()["labels"]["avoid-entry"]
-        self.assertEqual((0.0, 25.0), (avoid["severe_pct"], avoid["caught_pct"]))
+        self.assertEqual((25.0, 25.0), (avoid["severe_pct"], avoid["caught_pct"]))
+
+    def test_a_drained_pool_is_a_full_loss_whatever_its_last_price(self):
+        self.ledger.many("watch", 20, status="non_exitable", ret=12.0)
+        self.ledger.many("study", 11, status="non_exitable", ret=40.0)
+        self.ledger.many("study", 9, prefix="K", ret=40.0)
+        result = self.agg()
+        watch, study = result["labels"]["watch"], result["labels"]["study"]
+        self.assertEqual((-100.0, 0.0, 100.0), (watch["median"], watch["up_pct"], watch["severe_pct"]))
+        self.assertEqual((-100.0, 45.0, 55.0), (study["median"], study["up_pct"], study["severe_pct"]))
 
     def test_window_filters_rows(self):
         self.ledger.many("watch", 20, window="1h")

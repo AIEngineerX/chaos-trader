@@ -1286,6 +1286,8 @@ class PaperAutopilotRunner:
             "price_change_m5": as_float(s.get("priceChange_m5"), None),
             "volume_h1": as_float(s.get("volume_h1"), None),
             "url": s.get("url"),
+            # Gone only when every endpoint answered and none listed a pair; an endpoint that errored proves nothing.
+            "pair_gone": dex.get("pair_count") == 0 and not dex.get("errors"),
             "generated_at_utc": now_utc(),
             "boundary": "read-only Dex market refresh",
         }
@@ -1603,6 +1605,10 @@ class PaperAutopilotRunner:
         opened = parse_utc(row.get("opened_at_utc"))
         age_min = ((datetime.now(timezone.utc) - opened).total_seconds() / 60.0) if opened else 0.0
         if return_pct is None:
+            if market.get("pair_gone") or (price is not None and price <= 0):
+                # Nothing left to sell into: the whole remaining position is lost, not held open with no loss booked.
+                self.close_position(con, row, reason="pair_gone", market=market, return_pct=-100.0)
+                return "closed"
             self.log_event(con, "position_monitor_check", mint=row.get("mint"), position_id=row.get("id"), message="market refresh missing price/mcap", payload=market)
             return "checked"
         if entry_liq and liq is not None and liq <= entry_liq * (1.0 + float(self.config.get("exit", "liquidity_break_pct", default=-25)) / 100.0):

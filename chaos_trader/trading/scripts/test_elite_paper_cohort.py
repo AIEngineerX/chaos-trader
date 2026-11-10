@@ -241,6 +241,48 @@ class ElitePaperCohortTests(unittest.TestCase):
             self.assertEqual(("CLOSED", "missing_market"), (final["state"], final["final_status"]))
             con.close()
 
+    def test_a_dead_market_at_24h_is_the_whole_notional_lost_and_is_in_the_headline(self) -> None:
+        evidence = evidence_db()
+        add_event(evidence, 1, mint=MINT_A, at=T0)
+        sol = market(200.0, 5_000_000, symbol="SOL")
+        with tempfile.TemporaryDirectory() as td:
+            con = self.connect(td)
+            paper.observe(con, evidence, roster(), checked_at=T0, from_event_id=0, fetcher=MappingFetcher({MINT_A: market(0.001), paper.SOL_MINT: sol}))
+            template = dict(con.execute("SELECT * FROM episodes WHERE mint=?", (MINT_A,)).fetchone())
+
+            def clone(name: str, **changes) -> str:
+                row = {**template, "episode_id": name, "mint": (name[0].upper() * 32), **changes}
+                con.execute(f"INSERT INTO episodes({','.join(row)}) VALUES({','.join('?' for _ in row)})", list(row.values()))
+                return row["mint"]
+
+            drained, gone, unread = clone("drained"), clone("gone"), clone("unread")
+            # Two episodes an earlier version closed: a drained pool booked at its last price, and a late mark.
+            clone("legacy", state="CLOSED", final_status="illiquid", final_net_pnl_sol=0.3, final_net_r=0.3)
+            clone("tardy", state="CLOSED", final_status="late_mark", final_net_pnl_sol=0.5, final_net_r=0.5)
+            con.commit()
+            no_pair = {"price_usd": None, "liquidity_usd": None, "pair_selection_reason": "no_pairs_found"}
+            fetcher = MappingFetcher({
+                MINT_A: market(0.0015), drained: market(0.001, 400.0), gone: {**no_pair, "errors": []},
+                unread: {**no_pair, "errors": ["/tokens/v1: TimeoutError"]}, paper.SOL_MINT: sol,
+            })
+            result = paper.collect_marks(con, checked_at=T0 + timedelta(hours=24, minutes=5), fetcher=fetcher)
+            self.assertEqual(3, result["closed"])
+            finals = {r["episode_id"]: (r["state"], r["final_status"], r["final_net_pnl_sol"]) for r in con.execute("SELECT * FROM episodes")}
+            self.assertEqual(("CLOSED", "illiquid", -1.0), finals["drained"])
+            self.assertEqual(("CLOSED", "delisted", -1.0), finals["gone"])
+            self.assertEqual(("OPEN", None, None), finals["unread"])
+            day_marks = {r["episode_id"]: r["calibration_valid"] for r in con.execute("SELECT * FROM marks WHERE window_label='24h'")}
+            self.assertEqual({template["episode_id"]: 1, "drained": 1, "gone": 1}, day_marks)
+
+            status = paper.status(con)
+            won = finals[template["episode_id"]][2]
+            self.assertGreater(won, 0)
+            self.assertEqual((4, 3, 1), (status["valid_closed"], status["dead_closed"], status["unscored_closed"]))
+            self.assertAlmostEqual(won - 3.0, status["realized_pnl_sol"], places=6)
+            self.assertAlmostEqual(won - 3.0, status["realized_r"], places=6)
+            self.assertIn("Scored closed 4 (dead 3) · unscored 1", paper.compact(status, "status"))
+            con.close()
+
     def test_due_filter_runs_before_the_200_episode_network_bound(self) -> None:
         evidence = evidence_db()
         add_event(evidence, 1, at=T0)

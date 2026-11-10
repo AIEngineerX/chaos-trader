@@ -3,8 +3,9 @@
 
 Reads `signals JOIN outcomes` from the signal ledger. A mark counts only when the outcome tick took it within
 `PRIMARY_TOLERANCE_SECONDS` of its horizon (`primary_eligible`); a pair gone from DexScreener inside that window
-is a -100% mark. One read counts per (mint, label) per UTC day: the first one, and when its mark was late or
-missing, that mint and label are not scored that day, since a later read must not stand in for it. Reads of
+is a -100% mark, and so is a mark taken with the pool under $1,000, whatever its last price. One read counts per
+(mint, label) per UTC day: the first one, and when its mark was late or missing, that mint and label are not
+scored that day, since a later read must not stand in for it. Reads of
 tokens the user's own wallets hold (`owner_position_read`) and unread sweep candidates are never on the card.
 A label with fewer than `MIN_N` reads gets no rate at all.
 """
@@ -31,6 +32,8 @@ WINDOW_LABELS = tuple(WINDOWS)
 ENTRY_LABELS = ("study", "watch", "manual-review", "study-caution", "exit-liquidity-watch", "avoid-entry")
 # Labels that warn about a token: their hit is a mark of -70% or worse, a pool under $1k, or a pair gone.
 CAUGHT_LABELS = frozenset({"avoid-entry", "exit-liquidity-watch", "exit-watch"})
+# Outcome statuses the tracker gives a mark that could not be sold: pool under $1k, or pair gone.
+NOT_SELLABLE = frozenset({"non_exitable", "delisted"})
 OWNER_KIND = "owner_position_read"
 UNREAD = "sweep-candidate-unread"
 TICK_STAMP = Path("trading") / "state" / "outcome_tick_last_run"
@@ -67,16 +70,17 @@ def _score(label: str, rows: list[dict[str, Any]], min_n: int) -> dict[str, Any]
     n = len(rows)
     if n < min_n:
         return unscored(n)
-    rets = [r["return_pct"] for r in rows if r["return_pct"] is not None]
-    severe = [r["return_pct"] is not None and r["return_pct"] <= -70 for r in rows]
-    caught = [hit or r["outcome_status"] in {"non_exitable", "delisted"} for r, hit in zip(rows, severe)]
+    # A pool under $1k or a pair gone cannot be sold into, so the mark is -100% whatever the last print said.
+    marks = [-100.0 if r["outcome_status"] in NOT_SELLABLE else r["return_pct"] for r in rows]
+    rets = [v for v in marks if v is not None]
+    severe = [v is not None and v <= -70 for v in marks]
     return {
         "n": n,
         "median": median(rets),
         "up_pct": pct(sum(1 for v in rets if v > 0), n),
         "runner_pct": pct(sum(1 for v in rets if v >= 100), n),
         "severe_pct": pct(sum(severe), n),
-        "caught_pct": pct(sum(caught), n) if label in CAUGHT_LABELS else None,
+        "caught_pct": pct(sum(severe), n) if label in CAUGHT_LABELS else None,
         "status": "scored",
     }
 

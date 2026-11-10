@@ -198,6 +198,7 @@ def resolve_best_token_market(mint: str, cache: bool = True, ttl_seconds: int | 
             "txns_h1": None,
             "pair_created_at": None,
             "pair_selection_reason": "no_pairs_found",
+            "errors": dex.get("errors") or [],
             "symbol": dex.get("summary", {}).get("symbol"),
             "name": None,
             "url": None,

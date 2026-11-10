@@ -1398,6 +1398,47 @@ class PaperAutopilotRunnerTests(unittest.TestCase):
             self.assertEqual(pos[0], "PAPER_CLOSED")
             self.assertEqual(pos[1], "liquidity_break")
 
+    def test_monitor_closes_a_position_whose_pair_is_gone_as_a_full_loss(self):
+        for market in ({"price_usd": None, "market_cap": None, "liquidity_usd": None, "pair_gone": True},
+                       {"price_usd": 0.0, "market_cap": 0.0, "liquidity_usd": 0.0, "pair_gone": False}):
+            with self.subTest(market=market), tempfile.TemporaryDirectory() as td:
+                runner = PaperAutopilotRunner(config_for(Path(td)))
+                self._open_position(runner)
+                with runner.connect() as con, patch.object(runner, "fetch_market", return_value=market):
+                    runner.monitor_positions_once(con)
+                    con.commit()
+                    pos = con.execute("SELECT state, exit_reason, realized_r, remaining_pct FROM paper_positions").fetchone()
+                    fill = con.execute("SELECT gross_proceeds_usd, gross_realized_pnl_usd FROM paper_fills WHERE side='exit'").fetchone()
+                self.assertEqual(("PAPER_CLOSED", "pair_gone", 0), (pos[0], pos[1], pos[3]))
+                self.assertEqual((0.0, -100.0), (fill[0], fill[1]))
+                # $100 at a 25% stop is a $25 risk unit: losing all of it is -4R before the entry fee.
+                self.assertLessEqual(pos[2], -4.0)
+
+    def test_monitor_holds_a_position_when_the_market_read_failed(self):
+        with tempfile.TemporaryDirectory() as td:
+            runner = PaperAutopilotRunner(config_for(Path(td)))
+            self._open_position(runner)
+            unread = {"price_usd": None, "market_cap": None, "liquidity_usd": None, "pair_gone": False}
+            with runner.connect() as con, patch.object(runner, "fetch_market", return_value=unread):
+                runner.monitor_positions_once(con)
+                con.commit()
+                pos = con.execute("SELECT state, exit_reason, realized_r FROM paper_positions").fetchone()
+            self.assertEqual(("PAPER_OPEN", None, 0.0), (pos[0], pos[1], pos[2]))
+
+    def test_fetch_market_calls_a_pair_gone_only_when_every_endpoint_answered(self):
+        import chaos_paper_autopilot
+
+        with tempfile.TemporaryDirectory() as td:
+            runner = PaperAutopilotRunner(config_for(Path(td)))
+            answers = {"gone": {"ok": True, "pair_count": 0, "summary": {}, "errors": []},
+                       "unread": {"ok": True, "pair_count": 0, "summary": {}, "errors": ["/tokens/v1: TimeoutError"]},
+                       "listed": {"ok": True, "pair_count": 1, "summary": {"priceUsd": 0.001}, "errors": []}}
+            seen = {}
+            for name, answer in answers.items():
+                with patch.object(chaos_paper_autopilot, "fetch_token", return_value=answer):
+                    seen[name] = runner.fetch_market("MintGone111")["pair_gone"]
+            self.assertEqual({"gone": True, "unread": False, "listed": False}, seen)
+
     def test_monitor_can_take_tp1_and_tp2_same_fast_tick(self):
         with tempfile.TemporaryDirectory() as td:
             runner = PaperAutopilotRunner(config_for(Path(td)))
