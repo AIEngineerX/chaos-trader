@@ -39,6 +39,8 @@ DEFAULT_DB = PROFILE_HOME / "trading" / "db" / "paper_autopilot.sqlite"
 DEFAULT_SMART_WALLET_DB = PROFILE_HOME / "trading" / "db" / "smart_wallets.sqlite"
 PY = os.environ.get("CHAOS_PYTHON", sys.executable)
 BOUNDARY = "paper-only autopilot; no wallet, signing, orders, routing, webhooks, alerts, or live execution"
+# Below this pool size a position cannot be sold; the same line `signal_outcome_tracker.classify_outcome` draws.
+NON_EXITABLE_LIQUIDITY_USD = 1000.0
 STRATEGY_VERSION = "strategy_paper_engine_p0_v1"
 POLICY_VERSION = "paper_policy_p0_v4_multilane"
 ANALYZER_VERSION = "token_event_analyzer_p0_v1"
@@ -1611,6 +1613,10 @@ class PaperAutopilotRunner:
                 return "closed"
             self.log_event(con, "position_monitor_check", mint=row.get("mint"), position_id=row.get("id"), message="market refresh missing price/mcap", payload=market)
             return "checked"
+        if entry_liq and (liq is None or liq < NON_EXITABLE_LIQUIDITY_USD):
+            # The pool the position entered is drained: its last price is not a price anyone can sell at.
+            self.close_position(con, row, reason="non_exitable", market=market, return_pct=-100.0)
+            return "closed"
         if entry_liq and liq is not None and liq <= entry_liq * (1.0 + float(self.config.get("exit", "liquidity_break_pct", default=-25)) / 100.0):
             self.close_position(con, row, reason="liquidity_break", market=market, return_pct=return_pct)
             return "closed"

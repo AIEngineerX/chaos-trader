@@ -1398,6 +1398,21 @@ class PaperAutopilotRunnerTests(unittest.TestCase):
             self.assertEqual(pos[0], "PAPER_CLOSED")
             self.assertEqual(pos[1], "liquidity_break")
 
+    def test_monitor_closes_a_drained_pool_as_a_full_loss_whatever_its_last_price(self):
+        # Entry was at 0.001 with a $60k pool; the price still prints at or above entry but the pool is gone.
+        for liquidity in (300.0, None):
+            with self.subTest(liquidity=liquidity), tempfile.TemporaryDirectory() as td:
+                runner = PaperAutopilotRunner(config_for(Path(td)))
+                self._open_position(runner)
+                drained = {"price_usd": 0.0012, "market_cap": 216_000, "liquidity_usd": liquidity, "pair_gone": False}
+                with runner.connect() as con, patch.object(runner, "fetch_market", return_value=drained):
+                    runner.monitor_positions_once(con)
+                    con.commit()
+                    pos = con.execute("SELECT state, exit_reason, realized_r FROM paper_positions").fetchone()
+                    fill = con.execute("SELECT gross_proceeds_usd FROM paper_fills WHERE side='exit'").fetchone()
+                self.assertEqual(("PAPER_CLOSED", "non_exitable", 0.0), (pos[0], pos[1], fill[0]))
+                self.assertLessEqual(pos[2], -4.0)
+
     def test_monitor_closes_a_position_whose_pair_is_gone_as_a_full_loss(self):
         for market in ({"price_usd": None, "market_cap": None, "liquidity_usd": None, "pair_gone": True},
                        {"price_usd": 0.0, "market_cap": 0.0, "liquidity_usd": 0.0, "pair_gone": False}):
