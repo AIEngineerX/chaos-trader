@@ -42,6 +42,11 @@ NO_INGEST_REVIEW = "No ingest yet. Run chaos run chaos_alpha_elite_ingest first.
 JSON_HELP = "Print one JSON envelope: schema_version, command, generated_at, data"
 JSON_EXCLUSIVE = "--json cannot be combined with --raw or --render-json; pick one."
 REFILL_LEDGER = "the next token read starts a new ledger"
+NO_PAPER_BOOK = 'No paper book yet. Run the paper tick first (see "Running it on a schedule" in the README).'
+PAPER_OPEN_STATES = ("PAPER_OPEN", "PAPER_TRIMMED")
+PAPER_POSITION_FIELDS = ("id", "mint", "symbol", "state", "opened_at_utc", "closed_at_utc", "entry_price", "entry_market_cap", "entry_liquidity_usd",
+                         "simulated_notional_usd", "stop_pct", "tp1_pct", "tp2_pct", "time_stop_minutes", "high_watermark_price", "remaining_pct",
+                         "tp1_done", "tp2_done", "realized_r", "exit_reason", "updated_at_utc")
 NOTHING_YET_WALLETS = 'Wallet discovery needs transfer edges from the Helius wallet API. With a Helius RPC and HELIUS_API_KEY set, run: chaos run smart_wallet_tracker <wallet address> — then try again.'
 
 
@@ -920,6 +925,76 @@ def cmd_paper_report(args: argparse.Namespace) -> None:
         print(text)
 
 
+def paper_positions(db: Path, state: str, limit: int) -> dict[str, Any] | None:
+    """The paper book's positions, newest first, or None when no book holds a positions table yet. Reads only."""
+    from alpha_paper_trade import connect_ro
+    con = connect_ro(db)
+    if con is None:
+        return None
+    with closing(con):
+        if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='paper_positions'").fetchone() is None:
+            return None
+        marks = ",".join("?" * len(PAPER_OPEN_STATES))
+        where = {"open": f"WHERE state IN ({marks})", "closed": f"WHERE state NOT IN ({marks})", "all": ""}[state]
+        params = () if state == "all" else PAPER_OPEN_STATES
+        count = con.execute(f"SELECT COUNT(*) FROM paper_positions {where}", params).fetchone()[0]
+        rows = con.execute(f"SELECT {','.join(PAPER_POSITION_FIELDS)} FROM paper_positions {where} ORDER BY opened_at_utc DESC LIMIT ?", (*params, limit))
+        return {"state": state, "count": count, "positions": [dict(r) for r in rows]}
+
+
+def cmd_paper_positions(args: argparse.Namespace) -> None:
+    from paper_learning_report import PAPER_DB
+    if args.limit < 1:
+        raise SystemExit("--limit must be 1 or more.")
+    stop_if_corrupt(PAPER_DB, REFILL_PAPER_BOOK)
+    try:
+        payload = paper_positions(PAPER_DB, args.state, args.limit)
+    except sqlite3.DatabaseError as exc:
+        raise SystemExit(unreadable_db(PAPER_DB, exc, REFILL_PAPER_BOOK))
+    if payload is None:
+        if args.json:
+            print_envelope("paper-positions", json_status("no-paper-book", NO_PAPER_BOOK))
+        else:
+            print(NO_PAPER_BOOK)
+        return
+    if args.json:
+        print_envelope("paper-positions", payload)
+        return
+    shown = payload["positions"]
+    of = "" if len(shown) == payload["count"] else f" (newest {len(shown)} of {payload['count']})"
+    lines = [f"☄️ PAPER POSITIONS · {args.state} · {payload['count']}{of}"]
+    for p in shown:
+        closed = f" · closed {p['closed_at_utc']} ({p['exit_reason']})" if p["closed_at_utc"] else ""
+        lines.append(f"{p['symbol'] or '?'} {p['mint']} {p['state']} · entry {p['entry_price']} · ${p['simulated_notional_usd']} · stop {p['stop_pct']}% · "
+                     f"left {p['remaining_pct']:g}% · realized {p['realized_r']:+.3f}R · opened {p['opened_at_utc']}{closed}")
+    lines.append(BOUNDARY)
+    print("\n".join(lines))
+
+
+def cmd_size(args: argparse.Namespace) -> None:
+    from strategy_paper_engine import size_for_risk
+    if args.max_loss <= 0 or not 0 < args.stop_pct <= 100 or args.liquidity_bps <= 0:
+        raise SystemExit("--max-loss and --liquidity-bps must be above 0, and --stop-pct above 0 and at most 100.")
+    if (args.liquidity is not None and args.liquidity <= 0) or (args.entry is not None and args.entry <= 0):
+        raise SystemExit("--liquidity and --entry must be above 0 when given.")
+    out = size_for_risk(args.max_loss, args.stop_pct, liquidity_usd=args.liquidity, entry_price=args.entry, liquidity_bps=args.liquidity_bps)
+    if args.json:
+        print_envelope("size", out)
+        return
+    lines = ["☄️ RISK SIZE (arithmetic only; no fees, no slippage, no market read)",
+             f"Max loss ${out['max_loss_usd']:g} at a {out['stop_pct']:g}% stop: notional ${out['uncapped_notional_usd']:g}"]
+    if out["liquidity_cap_usd"] is None:
+        lines.append("Liquidity cap: not applied (pass --liquidity <pool USD>)")
+    else:
+        lines.append(f"Liquidity cap: ${out['liquidity_cap_usd']:g} ({out['liquidity_bps']:g} bps of ${out['liquidity_usd']:g})")
+    lines.append(f"Size: ${out['notional_usd']:g} · loss at stop ${out['loss_at_stop_usd']:g}" + (" · capped by liquidity" if out["capped_by_liquidity"] else ""))
+    if out["token_qty"] is not None:
+        lines.append(f"Token quantity at entry {out['entry_price']:g}: {out['token_qty']:g}")
+    lines.append(f"Control status: {out['control_status']}")
+    lines.append(BOUNDARY)
+    print("\n".join(lines))
+
+
 def cmd_outcomes(args: argparse.Namespace) -> None:
     from outcomes_report import aggregate, read_last_run, render_card, unscored
     from signal_ledger import DEFAULT_DB as LEDGER_DB
@@ -1030,6 +1105,21 @@ def main() -> None:
     prp.add_argument("--timeout", type=int, default=120)
     prp.set_defaults(func=cmd_paper_report)
 
+    ppp = sub.add_parser("paper-positions", help="The paper book's positions: entry, size, stop, what is left, realized R")
+    ppp.add_argument("--state", choices=("open", "closed", "all"), default="open", help="Which positions to list (default open)")
+    ppp.add_argument("--limit", type=int, default=20, help="Newest positions to list (default 20)")
+    ppp.add_argument("--json", action="store_true", help=JSON_HELP)
+    ppp.set_defaults(func=cmd_paper_positions)
+
+    zp = sub.add_parser("size", help="Notional for a max loss and a stop distance, capped by pool liquidity; arithmetic only")
+    zp.add_argument("--max-loss", type=float, required=True, help="The most this position may lose, in USD")
+    zp.add_argument("--stop-pct", type=float, required=True, help="Distance from entry to the stop, in percent")
+    zp.add_argument("--liquidity", type=float, default=None, help="Pool liquidity in USD; caps the size at --liquidity-bps of it")
+    zp.add_argument("--liquidity-bps", type=float, default=50.0, help="The cap as basis points of liquidity (default 50, the paper loop's default)")
+    zp.add_argument("--entry", type=float, default=None, help="Entry price in USD; adds the token quantity")
+    zp.add_argument("--json", action="store_true", help=JSON_HELP)
+    zp.set_defaults(func=cmd_size)
+
     from outcomes_report import MIN_N, WINDOW_LABELS
     op = sub.add_parser("outcomes", help="How past reads did at one horizon, per read label; no rate under 20 reads")
     op.add_argument("label", nargs="?", default=None, help="Show one read label only, for example watch")
@@ -1067,7 +1157,9 @@ Commands, run as `chaos <command>`:
 - analyze token <mint>          (deeper token analysis + artifact path)
 - strategy-paper <mint>         (strategy-faithful simulated decision: analyze-token + X; also `paper token <mint>`)
 - paper-report                  (paper learning report: outcomes, blockers, rule recommendations)
+- paper-positions [--state open]  (the paper book's positions: entry, size, stop, what is left, realized R; --state closed|all)
 - outcomes [label] [--window 24h]  (how past reads did at one horizon, per read label, from the outcome tick's marks; no rate under 20 reads)
+- size --max-loss 25 --stop-pct 20  (notional for a max loss and a stop distance; --liquidity caps it, --entry adds the token quantity; arithmetic only)
 - smart-signals                 (smart-money cluster evidence; --wallets lists the tracked wallets)
 - wallets                       (smart-wallet discovery status + queue)
 - wallets --discover 5          (enrich up to 5 never-scored edge-wallets, then re-rank)
@@ -1077,7 +1169,7 @@ Commands, run as `chaos <command>`:
 - wallets --remove <address>    (drop a wallet from the home roster)
 - skills list | install --for claude|codex|hermes|all  (shipped agent skills; `chaos skills install --dry-run` writes nothing)
 - run <script> [args]           (run a pipeline script, job, or skill helper by name; `chaos run` alone lists them)
-- mcp                           (read-only MCP server on stdio with seven tools over these commands; needs the mcp extra)
+- mcp                           (read-only MCP server on stdio with nine tools over these commands; needs the mcp extra)
 - --version                     (print the package version)
 - help                          (this list)
 
@@ -1091,7 +1183,7 @@ Optional CLI flags:
 - analyze token <mint> --gmgn    (secondary GMGN evidence; primary Helius/Dex gates unchanged)
 
 Output is a compact card: stats, copy blocks, Open DEX/SOL links, and next-command blocks. Artifacts are saved silently unless --artifact/slow analyze is used.
-sweep, token, analyze, strategy-paper, paper-report, outcomes, smart-signals, and wallets take --json, which prints one envelope (schema_version, command, generated_at, data) in place of the card; --raw keeps the older unwrapped payload.
+sweep, token, analyze, strategy-paper, paper-report, paper-positions, outcomes, size, smart-signals, and wallets take --json, which prints one envelope (schema_version, command, generated_at, data) in place of the card; --raw keeps the older unwrapped payload.
 Advisory + paper only. No wallet, signing, routing, or live execution.""".strip()))
 
     args = p.parse_args(argv)

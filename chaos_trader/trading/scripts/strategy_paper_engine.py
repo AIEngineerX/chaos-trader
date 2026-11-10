@@ -73,6 +73,30 @@ def max_simulated_size_usd(liquidity_usd: float | None, *, base_risk_usd: float 
     return round(max(0.0, min(base_risk_usd, max_notional_usd, liq_cap)), 2)
 
 
+def size_for_risk(max_loss_usd: float, stop_pct: float, *, liquidity_usd: float | None = None, entry_price: float | None = None, liquidity_bps: float = 50.0) -> dict[str, Any]:
+    """Notional that loses `max_loss_usd` when price falls `stop_pct` percent, capped at `liquidity_bps` of pool liquidity.
+
+    Arithmetic only: no fees, no slippage, no market read. The cap is the paper loop's own default.
+    """
+    uncapped = max_loss_usd / (stop_pct / 100.0)
+    cap = None if liquidity_usd is None else liquidity_usd * (liquidity_bps / 10_000.0)
+    notional = uncapped if cap is None else min(uncapped, cap)
+    return {
+        "max_loss_usd": max_loss_usd,
+        "stop_pct": stop_pct,
+        "uncapped_notional_usd": round(uncapped, 2),
+        "liquidity_usd": liquidity_usd,
+        "liquidity_bps": liquidity_bps,
+        "liquidity_cap_usd": None if cap is None else round(cap, 2),
+        "notional_usd": round(notional, 2),
+        "loss_at_stop_usd": round(notional * stop_pct / 100.0, 2),
+        "capped_by_liquidity": cap is not None and cap < uncapped,
+        "entry_price": entry_price,
+        "token_qty": None if entry_price is None else notional / entry_price,
+        "control_status": "analytical",
+    }
+
+
 def _add_unique(items: list[str], value: str) -> None:
     if value and value not in items:
         items.append(value)

@@ -23,6 +23,11 @@ MINT_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,88}$")
 NOT_A_MINT = "not a Solana mint address"
 SWEEP_LIMIT = (1, 20)
 REVIEW_DAYS = (1, 365)
+POSITIONS_LIMIT = (1, 200)
+# The horizons chaos_cmd offers for `outcomes` and the states it offers for `paper-positions`; the verb rejects any other.
+WINDOWS = ("15m", "1h", "4h", "24h", "3d", "7d")
+STATES = ("open", "closed", "all")
+LABEL_RE = re.compile(r"^[a-z][a-z-]{0,39}$")
 
 
 def _mint(mint: str) -> str:
@@ -38,6 +43,19 @@ def _within(name: str, value: int, bounds: tuple[int, int]) -> str:
     if not low <= value <= high:
         raise ValueError(f"{name} must be between {low} and {high}")
     return str(value)
+
+
+def _one_of(name: str, value: str, allowed: tuple[str, ...]) -> str:
+    if value not in allowed:
+        raise ValueError(f"{name} must be one of {', '.join(allowed)}")
+    return value
+
+
+def _label(label: str) -> list[str]:
+    label = label.strip().lower()
+    if label and not LABEL_RE.match(label):
+        raise ValueError("label must be a read label such as watch")
+    return [label] if label else []
 
 
 def _x_flag(with_x: bool) -> str:
@@ -92,6 +110,16 @@ def build(home: Path) -> FastMCP:
     async def paper_report() -> str:
         """Return the paper book's outcomes and blockers as the `chaos paper-report --json` envelope."""
         return await run("paper-report")
+
+    @server.tool()
+    async def paper_positions(state: str = "open", limit: int = 20) -> str:
+        """Return the paper book's open, closed, or all positions, newest first, as the `chaos paper-positions --json` envelope."""
+        return await run("paper-positions", "--state", _one_of("state", state, STATES), "--limit", _within("limit", limit, POSITIONS_LIMIT))
+
+    @server.tool()
+    async def outcomes(window: str = "24h", label: str = "") -> str:
+        """Return how past reads did at one horizon per read label, with no rate under 20 reads, as the `chaos outcomes --json` envelope."""
+        return await run("outcomes", *_label(label), "--window", _one_of("window", window, WINDOWS))
 
     @server.tool()
     async def roster_list() -> str:

@@ -15,8 +15,12 @@ except ImportError:
     ClientSession = None
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_paper_positions_and_size import write_book  # noqa: E402
+
 PUBLIC_RPC = "https://api.mainnet-beta.solana.com"
-TOOLS = ["analyze_token", "paper_report", "roster_list", "strategy_paper", "sweep", "token_read", "wallets_review"]
+TOOLS = ["analyze_token", "outcomes", "paper_positions", "paper_report", "roster_list", "strategy_paper", "sweep", "token_read", "wallets_review"]
+NO_PAPER_BOOK = 'No paper book yet. Run the paper tick first (see "Running it on a schedule" in the README).'
 MCP_EXTRA = 'chaos mcp needs the MCP extra: pip install "chaos-trader[mcp]"'
 NO_INGEST_REVIEW = "No ingest yet. Run chaos run chaos_alpha_elite_ingest first."
 NOT_A_MINT = "not a Solana mint address"
@@ -116,7 +120,7 @@ class McpServerTests(OnboardedHome):
         self.assertFalse(result.isError, result.content)
         return self.check_envelope(result.content[0].text, command)
 
-    def test_lists_exactly_the_seven_tools_each_with_a_one_sentence_description(self):
+    def test_lists_exactly_the_nine_tools_each_with_a_one_sentence_description(self):
         (listed,) = self.session(None)
         self.assertEqual(sorted(t.name for t in listed.tools), TOOLS)
         for tool in listed.tools:
@@ -131,6 +135,29 @@ class McpServerTests(OnboardedHome):
         (result,) = self.session(("wallets_review", {}))
         out = self.envelope(result, "wallets --review")
         self.assertEqual(out["data"], {"status": "no-ingest", "message": NO_INGEST_REVIEW})
+
+    def test_paper_positions_on_a_fresh_home_is_the_no_paper_book_envelope(self):
+        (result,) = self.session(("paper_positions", {}))
+        self.assertEqual(self.envelope(result, "paper-positions")["data"], {"status": "no-paper-book", "message": NO_PAPER_BOOK})
+
+    def test_paper_positions_reads_a_real_book_by_state_and_limit(self):
+        write_book(self.home)
+        default, closed, newest = self.session(("paper_positions", {}), ("paper_positions", {"state": "closed"}), ("paper_positions", {"state": "all", "limit": 1}))
+        data = self.envelope(default, "paper-positions")["data"]
+        self.assertEqual((data["state"], data["count"], [p["id"] for p in data["positions"]]), ("open", 2, ["p3", "p2"]))
+        self.assertEqual([(p["id"], p["exit_reason"]) for p in self.envelope(closed, "paper-positions")["data"]["positions"]], [("p1", "stop")])
+        data = self.envelope(newest, "paper-positions")["data"]
+        self.assertEqual((data["count"], [p["id"] for p in data["positions"]]), (3, ["p3"]))
+
+    def test_outcomes_on_a_fresh_home_scores_nothing_and_takes_a_window_and_a_label(self):
+        default, one = self.session(("outcomes", {}), ("outcomes", {"window": "1h", "label": "watch"}))
+        data = self.envelope(default, "outcomes")["data"]
+        self.assertEqual((data["window"], data["tick_last_run"]), ("24h", None))
+        self.assertTrue(data["labels"])
+        for label, item in data["labels"].items():
+            self.assertEqual((item["status"], item["n"]), ("below_n", 0), label)
+        data = self.envelope(one, "outcomes")["data"]
+        self.assertEqual((data["window"], list(data["labels"])), ("1h", ["watch"]))
 
     def test_a_malformed_mint_is_a_tool_error_and_the_server_keeps_answering(self):
         bad, after = self.session(("token_read", {"mint": "not-a-mint"}), ("roster_list", {}))
@@ -148,7 +175,11 @@ class McpServerTests(OnboardedHome):
         before = files_under(self.home)
         cases = [("sweep", {"limit": 0}, "limit must be between 1 and 20"), ("sweep", {"limit": 21}, "limit must be between 1 and 20"),
                  ("sweep", {"limit": 100000, "fast": True}, "limit must be between 1 and 20"),
-                 ("wallets_review", {"days": 0}, "days must be between 1 and 365"), ("wallets_review", {"days": 366}, "days must be between 1 and 365")]
+                 ("wallets_review", {"days": 0}, "days must be between 1 and 365"), ("wallets_review", {"days": 366}, "days must be between 1 and 365"),
+                 ("paper_positions", {"limit": 0}, "limit must be between 1 and 200"), ("paper_positions", {"limit": 201}, "limit must be between 1 and 200"),
+                 ("paper_positions", {"state": "PAPER_OPEN"}, "state must be one of open, closed, all"),
+                 ("outcomes", {"window": "2h"}, "window must be one of 15m, 1h, 4h, 24h, 3d, 7d"),
+                 ("outcomes", {"label": "--raw"}, "label must be a read label such as watch")]
         *results, after = self.session(*[(name, args) for name, args, _ in cases], ("roster_list", {}))
         for (name, args, message), result in zip(cases, results):
             self.assertTrue(result.isError, (name, args))
@@ -158,7 +189,7 @@ class McpServerTests(OnboardedHome):
 
     def test_nothing_is_written_outside_the_home(self):
         before = files_under(self.tmp, self.home)
-        results = self.session(None, ("roster_list", {}), ("wallets_review", {"days": 7}), ("paper_report", {}))
+        results = self.session(None, ("roster_list", {}), ("wallets_review", {"days": 7}), ("paper_report", {}), ("paper_positions", {}), ("outcomes", {}))
         for result in results[1:]:
             self.assertFalse(result.isError, result.content)
         self.assertEqual(files_under(self.tmp, self.home), before)
@@ -169,6 +200,13 @@ class McpServerTests(OnboardedHome):
         self.assertEqual(p.returncode, 2, p.stdout + p.stderr)
         self.assertEqual(p.stderr, f"No chaos-trader home at {nope.resolve()}. Run `chaos onboard` first (or set CHAOS_HOME to an existing home).\n")
         self.assertFalse(nope.exists())
+
+    def test_the_windows_and_states_are_the_ones_the_verbs_accept(self):
+        from chaos_trader.mcp_server import STATES, WINDOWS
+        for verb, flag, values in (("outcomes", "--window", WINDOWS), ("paper-positions", "--state", STATES)):
+            p = self.run_chaos(verb, "--help")
+            self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+            self.assertIn(f"{flag} {{{','.join(values)}}}", p.stdout, verb)
 
     def test_the_mint_check_is_the_pipeline_pattern(self):
         from chaos_trader.mcp_server import MINT_RE

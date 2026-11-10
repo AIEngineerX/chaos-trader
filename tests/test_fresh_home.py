@@ -12,7 +12,7 @@ from test_no_vendor_names import banned_kinds  # noqa: E402
 PUBLIC_RPC = "https://api.mainnet-beta.solana.com"
 
 # Every verb chaos_cmd.py accepts, plus the two that cli.py handles itself.
-VERBS = ("sweep", "token", "analyze", "strategy-paper", "smart-signals", "paper-report", "wallets", "outcomes", "help", "onboard", "update", "skills", "run", "--version")
+VERBS = ("sweep", "token", "analyze", "strategy-paper", "smart-signals", "paper-report", "paper-positions", "wallets", "outcomes", "size", "help", "onboard", "update", "skills", "run", "--version")
 
 PAPER_REPORT = 'No paper activity yet. Run the ingest job and the paper tick first (see "Running it on a schedule" in the README).'
 SWEEP_FAST = "The roster tape is empty until the ingest job has run. Run the ingest job, or use chaos sweep without --fast for the trending sweep."
@@ -96,7 +96,7 @@ class FreshHomeTests(unittest.TestCase):
         self.assertIn("--min-n cannot go below 20", p.stderr)
 
     def test_no_zero_byte_database_after_the_whole_path(self):
-        for args in (("paper-report",), ("sweep", "--fast"), ("wallets", "--discover", "3"), ("wallets",), ("outcomes",)):
+        for args in (("paper-report",), ("paper-positions",), ("sweep", "--fast"), ("wallets", "--discover", "3"), ("wallets",), ("outcomes",)):
             self.run_chaos(*args)
         self.assertEqual(self.zero_byte_files(), [])
 

@@ -4,6 +4,10 @@ All notable changes to this package. Dates are UTC.
 
 ## Unreleased
 
+- `chaos paper-positions [--state open|closed|all] [--limit N]` lists the paper book's positions, newest first: mint, state, entry, simulated size, stop, targets, what is left, realized R, and the exit reason. It reads `paper_autopilot.sqlite` only and writes nothing; with no book it prints `No paper book yet`. The stored decision payload is not part of the output. `--json` prints the envelope with `state`, `count` (all matching positions), and `positions`.
+- `chaos size --max-loss USD --stop-pct P [--liquidity USD] [--liquidity-bps 50] [--entry PRICE]` prints the notional that loses the max loss at the stop distance, capped at the given basis points of pool liquidity (50, the paper loop's default), and the token quantity when an entry price is given. It is arithmetic only: no fees, no slippage, no chain or market read, and its output carries `control_status: analytical`.
+- `chaos mcp` serves nine tools: `paper_positions` (`state`, `limit` 1 to 200) and `outcomes` (`window`, optional `label`) join the seven. An argument outside what the verb accepts is a tool error before any verb starts.
+- The `chaos-crypto-trader` skill checks `chaos outcomes` for the label it is about to report and says what that label's past reads did, or that the label is not scored yet. The `chaos-risk-engine` skill runs `chaos size` for the sizing formula.
 - Install lines in the README, the skills' Prerequisites block, `chaos update`, and the `chaos mcp` hint use the PyPI name (`pip install chaos-trader`, `chaos-trader[mcp]`, `chaos-trader==<version>` to roll back); the git URL remains for the unreleased `main` branch.
 
 ## 0.1.0 — 2026-10-02 (initial public release)

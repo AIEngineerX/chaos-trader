@@ -86,6 +86,14 @@ For no account size:
 notional = 1R / stop_distance_pct
 ```
 
+Do not do this arithmetic by hand. Run it:
+
+```text
+chaos size --max-loss 25 --stop-pct 20 --liquidity 80000 --entry 0.0012
+```
+
+`--max-loss` is the risk unit in USD and `--stop-pct` the distance from entry to invalidation in percent. `--liquidity` caps the size at 50 basis points of the pool, the paper loop's default (`--liquidity-bps` changes it); `--entry` adds the token quantity; `--json` prints the envelope. The command is arithmetic only: it reads no market and includes no fees or slippage, so its control status is `analytical`.
+
 Always include slippage and liquidity notes for small caps.
 
 ## Risk Classes

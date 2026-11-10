@@ -91,6 +91,8 @@ When sources conflict, state the conflict. Prefer onchain/exchange data over soc
 
 For a Solana mint, start the evidence with `chaos token <mint>`, or `chaos analyze token <mint>` for a deeper read. For the paper loop's plan, run `chaos strategy-paper <mint>`; add `--raw` to see the stop, targets, and time stop. All three are read-only and resolve `CHAOS_HOME` themselves.
 
+Before you report a label, run `chaos outcomes <label>` (for example `chaos outcomes watch`; `--window 1h` picks another horizon) and say in one line what past reads with that label did at that horizon. When the card says the label is not scored yet, say exactly that and give no rate. `chaos outcomes` is the only source for any statement about how past reads did.
+
 ## The Paper Loop's Plan
 
 `chaos strategy-paper <mint>` runs the same read and hands it to the paper engine, `strategy_paper_engine.py`. Every field below is a simulation setting for the paper book, not a level for a real position.
