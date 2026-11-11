@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Locked no-agent tick for the paper autopilot: one bounded discover/decide/monitor pass."""
+"""Locked no-agent tick for the paper autopilot: one bounded monitor/discover/decide pass."""
 from __future__ import annotations
 
 import argparse
@@ -16,6 +16,7 @@ except ImportError:  # Windows dev/test hosts
 
 BOUNDARY = "paper/simulated autopilot only; no signing, orders, swaps, or live execution"
 SCRIPTS = Path(__file__).resolve().parents[1] / "trading" / "scripts"
+CHILD_MARGIN_SECONDS = 30
 
 
 def profile_home() -> Path:
@@ -41,7 +42,7 @@ def acquire_lock(handle) -> bool:
         return False
 
 
-def command(*, limit: int, analyze_top: int, with_x: bool) -> list[str]:
+def command(*, limit: int, analyze_top: int, with_x: bool, timeout: int) -> list[str]:
     cmd = [
         sys.executable,
         str(SCRIPTS / "chaos_paper_autopilot.py"),
@@ -50,6 +51,9 @@ def command(*, limit: int, analyze_top: int, with_x: bool) -> list[str]:
         str(limit),
         "--analyze-top",
         str(analyze_top),
+        # The child stops its own analysis before this job's timeout would kill it mid-write.
+        "--budget-seconds",
+        str(timeout - CHILD_MARGIN_SECONDS),
     ]
     if with_x:
         cmd.append("--with-x")
@@ -73,11 +77,13 @@ def main() -> int:
             print(f"☄️ PAPER AUTOPILOT · skipped; prior tick active\n{BOUNDARY}")
             return 0
         env = {**os.environ, "CHAOS_HOME": str(profile), "HERMES_HOME": str(profile)}
+        timeout = max(60, min(args.timeout, 3600))
         proc = subprocess.run(
             command(
                 limit=max(1, min(args.limit, 50)),
                 analyze_top=max(0, min(args.analyze_top, 10)),
                 with_x=bool(args.with_x),
+                timeout=timeout,
             ),
             cwd=str(profile / "trading"),
             env=env,
@@ -85,7 +91,7 @@ def main() -> int:
             encoding="utf-8",
             errors="replace",
             capture_output=True,
-            timeout=max(60, min(args.timeout, 3600)),
+            timeout=timeout,
         )
         output = (proc.stdout or proc.stderr).strip()
         print(output or f"☄️ PAPER AUTOPILOT · empty output · exit {proc.returncode}\n{BOUNDARY}")

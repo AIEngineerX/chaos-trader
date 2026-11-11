@@ -150,7 +150,7 @@ Only `enforced` fields may be presented to a user as tunable. Add a contract tes
 The package ships six locked, bounded, paper-only wrappers that a scheduler (system cron, Task Scheduler, or the agent harness's own scheduler) can call. None is scheduled by the package; the user creates any schedule.
 
 ```text
-chaos run chaos_paper_autopilot_tick     one discover/decide/monitor pass of the paper autopilot
+chaos run chaos_paper_autopilot_tick     one monitor/discover/decide pass of the paper autopilot
 chaos run chaos_wallet_discovery_tick    enrich a bounded batch of never-scored edge-wallets, then re-rank (Helius key needed)
 chaos run chaos_paper_learning_tick      daily paper learning report, compact stdout
 chaos run chaos_alpha_elite_ingest       bounded elite-wallet ingestion (any RPC)

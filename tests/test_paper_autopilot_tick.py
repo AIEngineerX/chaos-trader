@@ -30,7 +30,7 @@ class PaperAutopilotTickTests(unittest.TestCase):
             self.assertEqual(Path("/tmp/chaos-tick-profile").resolve(), wrapper.profile_home())
 
     def test_command_is_bounded_and_targets_the_package_autopilot(self) -> None:
-        cmd = wrapper.command(limit=10, analyze_top=2, with_x=False)
+        cmd = wrapper.command(limit=10, analyze_top=2, with_x=False, timeout=540)
         self.assertEqual(sys.executable, cmd[0])
         self.assertEqual(str(ROOT / "chaos_trader" / "trading" / "scripts" / "chaos_paper_autopilot.py"), cmd[1])
         self.assertTrue(Path(cmd[1]).is_file())
@@ -41,9 +41,11 @@ class PaperAutopilotTickTests(unittest.TestCase):
         self.assertIn("2", cmd)
         self.assertNotIn("--with-x", cmd)
         self.assertNotIn("--max-cycles", cmd)
+        # The child is told to stop its own analysis before this job's 540 s timeout would kill it.
+        self.assertEqual("510", cmd[cmd.index("--budget-seconds") + 1])
 
     def test_with_x_flag_is_forwarded(self) -> None:
-        cmd = wrapper.command(limit=5, analyze_top=1, with_x=True)
+        cmd = wrapper.command(limit=5, analyze_top=1, with_x=True, timeout=540)
         self.assertEqual("--with-x", cmd[-1])
 
     def test_main_runs_one_locked_bounded_pass(self) -> None:
@@ -60,6 +62,7 @@ class PaperAutopilotTickTests(unittest.TestCase):
         self.assertIn("--limit", cmd)
         self.assertEqual("50", cmd[cmd.index("--limit") + 1])
         self.assertEqual("10", cmd[cmd.index("--analyze-top") + 1])
+        self.assertLess(float(cmd[cmd.index("--budget-seconds") + 1]), run.call_args.kwargs["timeout"])
         self.assertEqual(str(Path(td)), run.call_args.kwargs["env"]["HERMES_HOME"])
 
     def test_a_corrupt_database_fails_the_real_tick_with_one_line(self) -> None:

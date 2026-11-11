@@ -1440,6 +1440,56 @@ class PaperAutopilotRunnerTests(unittest.TestCase):
                 pos = con.execute("SELECT state, exit_reason, realized_r FROM paper_positions").fetchone()
             self.assertEqual(("PAPER_OPEN", None, 0.0), (pos[0], pos[1], pos[2]))
 
+    def test_a_tick_stopped_during_a_decision_keeps_the_exit_it_already_booked(self):
+        # The position is down 50% against a 25% stop. The tick is interrupted while deciding a candidate,
+        # which is where the job's timeout lands: the stop has to be in the book already.
+        with tempfile.TemporaryDirectory() as td:
+            runner = PaperAutopilotRunner(config_for(Path(td)))
+            self._open_position(runner)
+            with runner.connect() as con:  # hold a different mint from the one the sweep discovers
+                con.execute("UPDATE candidates SET mint='HELD' WHERE mint=?", (MINT,))
+                con.execute("UPDATE paper_positions SET mint='HELD' WHERE mint=?", (MINT,))
+                con.commit()
+            halved = {"price_usd": 0.0005, "market_cap": 90_000, "liquidity_usd": 60_000, "pair_gone": False}
+            with patch("chaos_paper_autopilot.sweep_payload", side_effect=lambda limit, **kw: sweep_payload_fixture(limit)), \
+                 patch.object(runner, "decide_candidate", side_effect=KeyboardInterrupt) as decide, \
+                 patch.object(runner, "fetch_market", return_value=halved):
+                with self.assertRaises(KeyboardInterrupt):
+                    runner.run_once(limit=1, analyze_top=1, with_x=False)
+            self.assertEqual(1, decide.call_count)
+            with closing(sqlite3.connect(Path(td) / "paper.sqlite")) as con:
+                pos = con.execute("SELECT state, exit_reason FROM paper_positions").fetchone()
+                candidates = con.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
+            self.assertEqual(("PAPER_CLOSED", "stop_loss"), (pos[0], pos[1]))
+            self.assertGreaterEqual(candidates, 1)
+
+    def test_a_tick_out_of_budget_starts_no_analysis_and_a_tick_inside_it_bounds_the_analyzer(self):
+        for budget, expect_calls in ((0.0, 0), (100.0, 1)):
+            with self.subTest(budget=budget), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                smart_db = root / "smart.sqlite"
+                seed_wallet_event_db(smart_db, run_id="elite-proof", observed_at=datetime.now(timezone.utc) - timedelta(minutes=5), wallets=2)
+                cfg = config_for(root)
+                cfg.raw["paths"]["smart_wallet_sqlite"] = str(smart_db)
+                runner = PaperAutopilotRunner(cfg)
+                timeouts: list[float] = []
+
+                def analyze(mint, *, x_enabled, timeout):
+                    timeouts.append(timeout)
+                    return source_gap_payload_fixture()
+
+                with patch("chaos_paper_autopilot.sweep_payload", side_effect=lambda limit, **kw: sweep_payload_fixture(limit)), \
+                     patch.object(runner, "run_analyze", side_effect=analyze), \
+                     patch.object(runner, "fetch_market", return_value={"price_usd": 0.001, "market_cap": 180_000, "liquidity_usd": 60_000}):
+                    out = runner.run_once(limit=1, analyze_top=1, with_x=False, budget_seconds=budget)
+                self.assertEqual(expect_calls, len(timeouts))
+                self.assertEqual(expect_calls, len(out["decisions"]))
+                with closing(sqlite3.connect(root / "paper.sqlite")) as con:
+                    skipped = con.execute("SELECT COUNT(*) FROM events WHERE event_type='tick_budget_exhausted'").fetchone()[0]
+                self.assertEqual(1 - expect_calls, skipped)
+                for t in timeouts:
+                    self.assertTrue(0 < t <= budget, t)
+
     def test_fetch_market_calls_a_pair_gone_only_when_every_endpoint_answered(self):
         import chaos_paper_autopilot
 

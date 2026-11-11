@@ -41,6 +41,7 @@ PY = os.environ.get("CHAOS_PYTHON", sys.executable)
 BOUNDARY = "paper-only autopilot; no wallet, signing, orders, routing, webhooks, alerts, or live execution"
 # Below this pool size a position cannot be sold; the same line `signal_outcome_tracker.classify_outcome` draws.
 NON_EXITABLE_LIQUIDITY_USD = 1000.0
+ANALYZE_TIMEOUT_SECONDS = 620
 STRATEGY_VERSION = "strategy_paper_engine_p0_v1"
 POLICY_VERSION = "paper_policy_p0_v4_multilane"
 ANALYZER_VERSION = "token_event_analyzer_p0_v1"
@@ -992,7 +993,7 @@ class PaperAutopilotRunner:
         env["PYTHONIOENCODING"] = "utf-8"  # children write utf-8; run_analyze decodes utf-8
         return env
 
-    def run_analyze(self, mint: str, *, x_enabled: bool) -> dict[str, Any]:
+    def run_analyze(self, mint: str, *, x_enabled: bool, timeout: float = ANALYZE_TIMEOUT_SECONDS) -> dict[str, Any]:
         deep = self.config.get("deep_analyze", default={}) or {}
         xcfg = self.config.get("x_research", default={}) or {}
         cmd = [
@@ -1009,7 +1010,7 @@ class PaperAutopilotRunner:
         if x_enabled:
             cmd.append("--x")
         cmd.append("--raw")
-        proc = subprocess.run(cmd, cwd=str(SCRIPT_DIR), env=self.env(), text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=620, check=False)
+        proc = subprocess.run(cmd, cwd=str(SCRIPT_DIR), env=self.env(), text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=timeout, check=False)
         if proc.returncode != 0:
             raise RuntimeError((proc.stderr or proc.stdout or "analyze failed")[:1200])
         return json.loads(proc.stdout)
@@ -1040,7 +1041,7 @@ class PaperAutopilotRunner:
         self.persist_decision(con, decision, expected_mint=requested_mint)
         return decision
 
-    def decide_candidate(self, con: sqlite3.Connection, mint: str, *, use_x: bool = False) -> dict[str, Any]:
+    def decide_candidate(self, con: sqlite3.Connection, mint: str, *, use_x: bool = False, analyze_timeout: float = ANALYZE_TIMEOUT_SECONDS) -> dict[str, Any]:
         # Cheap, deterministic wallet evidence comes first. Candidates that
         # cannot satisfy the source contract must not consume scarce market/X
         # analysis budget or enter through the old generic catalyst fallback.
@@ -1102,7 +1103,7 @@ class PaperAutopilotRunner:
         x_max = int(self.config.get("x_research", "max_per_day", default=25))
         x_hour_max = int(self.config.get("x_research", "max_per_hour", default=999999))
         x_enabled = bool(use_x) and self.budget_available(con, "x_search", x_max) and self._event_count_since(con, "x_search", hour_cutoff) < x_hour_max
-        payload = self.run_analyze(mint, x_enabled=x_enabled)
+        payload = self.run_analyze(mint, x_enabled=x_enabled, timeout=analyze_timeout)
         self.inc_counter(con, "deep_analyze")
         self.log_event(con, "deep_analyze", mint=mint, message="deep analyze consumed", payload={"x_enabled": x_enabled})
         if payload.get("x_request_made"):  # D2: charged only when a request actually reached the provider
@@ -1663,22 +1664,35 @@ class PaperAutopilotRunner:
                 self.evaluate_position(con, row, market)
             except Exception as exc:
                 self.log_event(con, "position_monitor_error", mint=row.get("mint"), position_id=row.get("id"), message=str(exc)[:500], payload={})
+            con.commit()
         return rows
 
-    def run_once(self, *, limit: int | None = None, analyze_top: int = 0, with_x: bool = False) -> dict[str, Any]:
+    def run_once(self, *, limit: int | None = None, analyze_top: int = 0, with_x: bool = False, budget_seconds: float | None = None) -> dict[str, Any]:
         with_x = bool(with_x) and x_provider.provider_name() != "none"  # D3: no provider is X off
+        deadline = time.monotonic() + budget_seconds if budget_seconds is not None else None
         with self.connect() as con:
+            # Open positions come first and every step is committed as it ends, so a tick that is stopped
+            # part-way keeps the exits and decisions it already booked.
+            open_positions = self.monitor_positions_once(con)
             discovered = self.discover(con, limit=limit)
+            con.commit()
             decisions: list[dict[str, Any]] = []
             if analyze_top > 0:
                 for c in self.active_candidates(con, limit=analyze_top, with_x=with_x):
+                    analyze_timeout = float(ANALYZE_TIMEOUT_SECONDS)
+                    if deadline is not None:
+                        left = deadline - time.monotonic()
+                        if left <= 0:
+                            self.log_event(con, "tick_budget_exhausted", mint=c.get("mint"), message="decision left for the next tick", payload={"budget_seconds": budget_seconds})
+                            con.commit()
+                            break
+                        analyze_timeout = min(analyze_timeout, left)
                     try:
-                        decisions.append(self.decide_candidate(con, c["mint"], use_x=with_x))
+                        decisions.append(self.decide_candidate(con, c["mint"], use_x=with_x, analyze_timeout=analyze_timeout))
                     except Exception as exc:
                         self.log_event(con, "deep_analyze_error", mint=c.get("mint"), message=str(exc)[:500], payload={})
                         decisions.append({"ok": False, "mint": c.get("mint"), "decision": "error", "error": str(exc)[:500]})
-            open_positions = self.monitor_positions_once(con)
-            con.commit()
+                    con.commit()
             summary = self.status(con)
         return {
             "ok": True,
@@ -1775,6 +1789,7 @@ def main() -> None:
     p.add_argument("--limit", type=int, help="Discovery candidate limit override")
     p.add_argument("--analyze-top", type=int, default=0, help="Deep-analyze top N candidates during this run")
     p.add_argument("--with-x", action="store_true", help="Allow X in deep candidate decisions; still capped by config counters")
+    p.add_argument("--budget-seconds", type=float, help="With --once: start no new candidate analysis after this many seconds, and stop one that is running")
     p.add_argument("--raw", action="store_true")
     args = p.parse_args()
     if args.with_x and x_provider.provider_name() == "none":
@@ -1786,7 +1801,7 @@ def main() -> None:
         if args.status:
             out = runner.status()
         elif args.once:
-            out = runner.run_once(limit=args.limit, analyze_top=max(0, args.analyze_top), with_x=bool(args.with_x))
+            out = runner.run_once(limit=args.limit, analyze_top=max(0, args.analyze_top), with_x=bool(args.with_x), budget_seconds=args.budget_seconds)
         elif args.max_cycles:
             out = runner.run_loop(max_cycles=max(1, args.max_cycles), analyze_top=max(0, args.analyze_top), with_x=bool(args.with_x))
         else:
