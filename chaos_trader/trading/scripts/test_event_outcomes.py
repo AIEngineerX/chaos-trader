@@ -92,16 +92,25 @@ class EventOutcomeTests(unittest.TestCase):
             con,
             event,
             windows=windows,
+            checked_at=datetime(2026, 6, 26, 12, 6, tzinfo=timezone.utc),
+            baseline_grace_seconds=600,
+            fetcher=fetcher,
+        )
+        self.assertEqual([r["window"] for r in second["written_outcomes"]], ["5m"])
+        five = con.execute("SELECT * FROM event_outcomes WHERE window_label='5m'").fetchone()
+        self.assertEqual((five["return_pct"], five["calibration_valid"]), (50.0, 1))
+
+        at_15m = event_outcome_tracker.track_event(
+            con,
+            event,
+            windows=windows,
             checked_at=datetime(2026, 6, 26, 12, 16, tzinfo=timezone.utc),
             baseline_grace_seconds=600,
             fetcher=fetcher,
         )
-        self.assertEqual([r["window"] for r in second["written_outcomes"]], ["5m", "15m"])
-        rows = con.execute("SELECT * FROM event_outcomes ORDER BY window_label").fetchall()
-        self.assertEqual(len(rows), 2)
-        self.assertTrue(all(int(r["calibration_valid"]) == 1 for r in rows))
-        self.assertEqual(rows[0]["return_pct"], 50.0)
-        self.assertEqual(rows[1]["max_return_pct"], 50.0)
+        self.assertEqual([r["window"] for r in at_15m["written_outcomes"]], ["15m"])
+        fifteen = con.execute("SELECT * FROM event_outcomes WHERE window_label='15m'").fetchone()
+        self.assertEqual((fifteen["return_pct"], fifteen["calibration_valid"], fifteen["max_return_pct"]), (-50.0, 1, 50.0))
 
         # Later window captures drawdown and preserves prior max-up.
         later_windows = event_outcome_tracker.parse_windows("5m,15m,1h")
@@ -118,6 +127,49 @@ class EventOutcomeTests(unittest.TestCase):
         self.assertEqual(one_h["return_pct"], -50.0)
         self.assertEqual(one_h["max_return_pct"], 50.0)
         self.assertEqual(one_h["max_drawdown_pct"], -50.0)
+
+    def test_a_window_reached_late_gets_no_price_and_does_not_borrow_the_current_one(self):
+        con = self.connect()
+        event = make_event(observed_at=datetime(2026, 6, 26, 12, 0, tzinfo=timezone.utc))
+        fetcher = SequenceFetcher([1.0, 3.0])
+        windows = event_outcome_tracker.parse_windows("5m,15m,1h,6h,24h")
+        track = lambda when: event_outcome_tracker.track_event(  # noqa: E731
+            con, event, windows=windows, checked_at=when, baseline_grace_seconds=600, fetcher=fetcher)
+        track(datetime(2026, 6, 26, 12, 1, tzinfo=timezone.utc))
+        # The tracker was down for a day. The token trades at 3x now; no window saw that price at its horizon.
+        late = track(datetime(2026, 6, 27, 13, 0, tzinfo=timezone.utc))
+        self.assertEqual(["5m", "15m", "1h", "6h", "24h"], [r["window"] for r in late["written_outcomes"]])
+        rows = con.execute("SELECT return_pct, price_usd_now, outcome_status, dead_or_alive, calibration_valid FROM event_outcomes").fetchall()
+        self.assertEqual([(None, None, "missing_late", "unknown", 0)] * 5, [tuple(r) for r in rows])
+        self.assertEqual(1, fetcher.calls)  # the baseline only: nothing on time, so no market read
+        self.assertEqual([], event_outcome_report.load_rows(con))
+
+    def test_one_run_prices_the_window_it_reached_on_time_and_not_the_one_it_missed(self):
+        con = self.connect()
+        event = make_event(observed_at=datetime(2026, 6, 26, 12, 0, tzinfo=timezone.utc))
+        fetcher = SequenceFetcher([1.0, 1.5])
+        windows = event_outcome_tracker.parse_windows("5m,15m")
+        for when in (datetime(2026, 6, 26, 12, 1, tzinfo=timezone.utc), datetime(2026, 6, 26, 12, 16, tzinfo=timezone.utc)):
+            event_outcome_tracker.track_event(con, event, windows=windows, checked_at=when, baseline_grace_seconds=600, fetcher=fetcher)
+        rows = {r["window_label"]: (r["return_pct"], r["outcome_status"], r["calibration_valid"]) for r in con.execute("SELECT * FROM event_outcomes")}
+        self.assertEqual({"5m": (None, "missing_late", 0), "15m": (50.0, "positive", 1)}, rows)
+
+    def test_the_limit_counts_events_with_work_left_so_the_tape_past_it_is_reached(self):
+        con = self.connect()
+        start = datetime(2026, 6, 26, 12, 0, tzinfo=timezone.utc)
+        windows = event_outcome_tracker.parse_windows("5m")
+        with tempfile.TemporaryDirectory() as td:
+            tape = Path(td) / "tape.jsonl"
+            events = [make_event(f"cet1_{i}", observed_at=start) for i in range(3)]
+            tape.write_text("\n".join(json.dumps(e) for e in [{"event_type": "no_id"}, *events]) + "\n", encoding="utf-8")
+            pending = []
+            for _ in range(4):
+                out = event_outcome_tracker.track_tape(con, tape, windows=windows, checked_at=start + timedelta(minutes=6), limit=1, fetcher=SequenceFetcher([1.0]))
+                pending.append(out["events_pending"])
+        # One event per run; the row with no id is skipped each time without using the limit up.
+        self.assertEqual([4, 3, 2, 1], pending)
+        tracked = [r[0] for r in con.execute("SELECT event_id FROM event_outcomes ORDER BY event_id")]
+        self.assertEqual(["cet1_0", "cet1_1", "cet1_2"], tracked)
 
     def test_late_baseline_is_recorded_but_excluded_from_default_report(self):
         con = self.connect()

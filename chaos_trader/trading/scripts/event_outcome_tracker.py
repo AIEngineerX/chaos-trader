@@ -31,6 +31,7 @@ DEFAULT_DB = PROFILE_HOME / "trading" / "db" / "event_outcomes.sqlite"
 BOUNDARY = "read-only event outcome calibration; no execution, alerts, wallets, scraping, or webhooks"
 DEFAULT_WINDOWS = "5m,15m,1h,6h,24h"
 DEFAULT_BASELINE_GRACE_SECONDS = 10 * 60
+WINDOW_TOLERANCE_SECONDS = 5 * 60  # the same lateness line signal_outcome_tracker draws
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS event_outcome_events (
@@ -307,16 +308,19 @@ def previous_returns(con: sqlite3.Connection, event_id: str) -> list[float]:
     return [float(r[0]) for r in rows if r[0] is not None]
 
 
-def build_outcome_row(event_row: dict[str, Any], window_label: str, checked_at: datetime, snap: dict[str, Any], prior_returns: list[float]) -> dict[str, Any]:
+def build_outcome_row(event_row: dict[str, Any], window_label: str, checked_at: datetime, snap: dict[str, Any], prior_returns: list[float], *, late: bool = False) -> dict[str, Any]:
     start = parse_ts(event_row["outcome_start_at"]) or checked_at
     age_seconds = max(0, int((checked_at - start).total_seconds()))
     price_start = as_float(event_row.get("baseline_price_usd"))
     liq_start = as_float(event_row.get("baseline_liquidity_usd"))
     mc_start = as_float(event_row.get("baseline_market_cap"))
+    if late:
+        # The window passed unread. Today's price is not the price at that window, so the row carries none.
+        snap = {}
     ret = pct(snap.get("price_usd"), price_start)
     liq_chg = pct(snap.get("liquidity_usd"), liq_start)
     mc_chg = pct(snap.get("market_cap"), mc_start)
-    alive, status = classify_outcome(ret, snap.get("liquidity_usd"), liq_start)
+    alive, status = ("unknown", "missing_late") if late else classify_outcome(ret, snap.get("liquidity_usd"), liq_start)
     return_series = [*prior_returns]
     if ret is not None:
         return_series.append(ret)
@@ -336,7 +340,7 @@ def build_outcome_row(event_row: dict[str, Any], window_label: str, checked_at: 
         "max_drawdown_pct": min(return_series) if return_series else None,
         "dead_or_alive": alive,
         "outcome_status": status,
-        "calibration_valid": 1 if event_row.get("baseline_status") == "valid_baseline" else 0,
+        "calibration_valid": 1 if event_row.get("baseline_status") == "valid_baseline" and not late else 0,
         "dex_url": snap.get("dex_url"),
         "raw_json": json.dumps(snap.get("raw") or {}, ensure_ascii=False, sort_keys=True, default=str),
     }
@@ -348,6 +352,14 @@ def due_windows(event_row: dict[str, Any], windows: list[tuple[str, timedelta]],
         return []
     age = checked_at - start
     return [label for label, delta in windows if age >= delta and label not in done]
+
+
+def late_windows(event_row: dict[str, Any], windows: list[tuple[str, timedelta]], checked_at: datetime, due: list[str]) -> set[str]:
+    """The due windows this run reached more than the tolerance after their horizon."""
+    start = parse_ts(event_row["outcome_start_at"])
+    if start is None:
+        return set()
+    return {label for label, delta in windows if label in due and (checked_at - start - delta).total_seconds() > WINDOW_TOLERANCE_SECONDS}
 
 
 def track_event(
@@ -376,10 +388,12 @@ def track_event(
     due = due_windows(event_row, windows, checked_at, done)
     outcomes: list[dict[str, Any]] = []
     if due:
-        snap = market_snapshot(event, fetcher)
+        late = late_windows(event_row, windows, checked_at, due)
+        # One current mark must not be written into several horizons: only windows read on time get it.
+        snap = market_snapshot(event, fetcher) if len(late) < len(due) else {}
         prior = previous_returns(con, str(event_row["event_id"])) if not dry_run else []
         for label in due:
-            row = build_outcome_row(event_row, label, checked_at, snap, prior)
+            row = build_outcome_row(event_row, label, checked_at, snap, prior, late=label in late)
             prior = [*prior, row["return_pct"]] if row["return_pct"] is not None else prior
             outcomes.append(row)
             if not dry_run:
@@ -423,13 +437,27 @@ def track_tape(
     ensure_schema(con)
     checked = checked_at or now_utc()
     events, load_errors = load_tape(tape_path)
-    selected = events[: max(1, min(limit, 10_000))]
+    cap = max(1, min(limit, 10_000))
+    # An event whose windows are all written needs nothing more, so it does not use up the limit;
+    # otherwise the first `limit` rows of the tape are the only ones ever tracked.
+    labels = {label for label, _delta in windows}
+    done_by_event: dict[str, set[str]] = {}
+    for event_id, label in con.execute("SELECT event_id, window_label FROM event_outcomes"):
+        done_by_event.setdefault(str(event_id), set()).add(str(label))
+    pending = [e for e in events if not labels <= done_by_event.get(str(e.get("event_id")), set())]
+    selected: list[dict[str, Any]] = []
     baselines = 0
     late_baselines = 0
     outcomes = 0
     skipped: list[dict[str, Any]] = []
     written: list[dict[str, Any]] = []
-    for event in selected:
+    for event in pending:
+        if len(selected) >= cap:
+            break
+        if not valid_event(event)[0]:
+            skipped.append({"event_id": event.get("event_id"), "reason": valid_event(event)[1]})
+            continue
+        selected.append(event)
         try:
             result = track_event(
                 con,
@@ -463,6 +491,7 @@ def track_tape(
         "tape": str(tape_path),
         "events_seen": len(events),
         "events_selected": len(selected),
+        "events_pending": len(pending),
         "baselines_written": baselines,
         "late_baselines": late_baselines,
         "outcomes_written": outcomes,
