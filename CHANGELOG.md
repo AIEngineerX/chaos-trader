@@ -4,6 +4,8 @@ All notable changes to this package. Dates are UTC.
 
 ## Unreleased
 
+## 0.1.1 — 2026-11-13
+
 - `chaos outcomes` counts a mark taken with the pool under $1,000 as a 100% fall, as it already did a pair gone from DexScreener. Before, such a mark kept its last price in the median and in the share that went up, so twenty reads whose pools had all drained could show a rise. For `avoid-entry` and `exit-liquidity-watch` the share caught now equals the share that fell 70% or more.
 - The paper loop closes a position whose pair is gone from DexScreener, or whose price reads zero, with exit reason `pair_gone` and the whole remaining notional lost. Before, such a position stayed open with nothing booked and kept one of the open slots. A pair is gone only when every DexScreener endpoint answered and none listed it; when an endpoint failed, the position is held and the check is logged, as before.
 - The paper loop closes a position whose pool is under $1,000, or reports no liquidity, with exit reason `non_exitable` and the whole remaining notional lost. Before, the liquidity-break exit booked such a position at its last price less slippage, so a pool drained 99% at a flat price closed near break-even. A pool that has shrunk by the configured share but still holds $1,000 or more closes as `liquidity_break` at the observed price, as before.

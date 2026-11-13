@@ -1,5 +1,5 @@
 name: chaos-trader
-version: 0.1.0
+version: 0.1.1
 description: "Solana wallet research, token ranking, and paper trading. Read-only; nothing in this profile signs or sends."
 hermes_requires: ">=0.21.0"
 author: "chaos-trader contributors"
