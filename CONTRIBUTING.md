@@ -54,7 +54,7 @@ CI runs the same checks on Python 3.11 and 3.14, then builds the wheel, checks i
 
 - One logical change per commit, with a `feat:`, `fix:`, `docs:`, `test:`, `build:`, `ci:`, or `chore:` prefix.
 - Set a public Git name and your own GitHub no-reply email with repository-local `user.name` and `user.email` settings before committing.
-- The opt-in pre-push hook scans reachable blobs, commit/tag metadata, and historical filenames for the configured private-name fingerprints. It does not replace the secret scanner or guarantee that every possible private value is detected. Install it in each clone; Git does not install hooks automatically.
+- The opt-in pre-push hook reads Git's proposed updates from stdin and scans the full history reachable from each outgoing object ID, including detached or unreferenced tips, blobs, commit/tag metadata, and historical filenames. It also checks source and destination ref names, including lightweight tags, for the configured private-name fingerprints. Deletions send no objects and are allowed even for private ref names so those refs can be removed; mixed pushes still check every non-deletion update. Invalid input or unreadable objects fail closed without printing private values. The standalone `python tools/history_name_scan.py` continues to scan all local refs and their reachable history, and now checks ref names too. Run `python -W error::ResourceWarning -m unittest discover -s tests -p test_history_name_scan.py -v` for real local bare-remote regression tests. The hook does not replace the secret scanner or guarantee that every possible private value is detected. Install it in each clone; Git does not install hooks automatically, and `--no-verify` can bypass it.
 - Do not force-push to `main`.
 
 ## Releases
