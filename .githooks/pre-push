@@ -1,0 +1,5 @@
+#!/bin/sh
+# Install per clone with: git config --local core.hooksPath .githooks
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+exec python3 tools/history_name_scan.py

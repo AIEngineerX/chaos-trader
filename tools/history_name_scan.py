@@ -63,6 +63,20 @@ def hits_in(text: str) -> list[str]:
     return sorted(kinds)
 
 
+def metadata_hits() -> list[tuple[str, str, str]]:
+    """Scan commit/tag metadata and tree names without echoing private values."""
+    ids = _git(["rev-list", "--objects", "--all", "--no-object-names"])
+    objects = _git(["cat-file", "--batch-check=%(objectname) %(objecttype)"], ids)
+    selected = {sha: kind for sha, kind in
+                (line.split() for line in objects.decode().splitlines())
+                if kind in {"commit", "tag", "tree"}}
+    hits = []
+    for sha, data in read_blobs(sorted(selected)):
+        for kind in hits_in(data.decode("utf-8", "replace")):
+            hits.append(("<" + selected[sha] + " metadata>", kind, sha))
+    return hits
+
+
 def main() -> int:
     paths = blob_paths()
     hits: list[tuple[str, str, str]] = []
@@ -74,11 +88,13 @@ def main() -> int:
         scanned += 1
         for kind in hits_in(data.decode("utf-8", "replace")):
             hits.append((path, kind, sha))
+    hits.extend(metadata_hits())
     if not hits:
         print(f"history scan: clean ({scanned} blobs)")
         return 0
     for path, kind, sha in sorted(hits):
-        print(f"{kind} {sha[:10]} {path}")
+        safe_path = "<redacted path>" if hits_in(path) else path
+        print(f"{kind} {sha[:10]} {safe_path}")
     print(f"history scan: {len(hits)} hits in {len({h[2] for h in hits})} blobs ({scanned} blobs scanned)")
     return 1
 

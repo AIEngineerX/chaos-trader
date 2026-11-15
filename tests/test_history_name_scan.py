@@ -62,6 +62,23 @@ class HistoryNameScanTests(unittest.TestCase):
             self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
             self.assertEqual(p.stdout.strip(), "history scan: clean (1 blobs)")
 
+    def test_private_metadata_is_rejected_without_echoing_values(self):
+        for surface in ("name", "email", "message", "tag", "path"):
+            with self.subTest(surface=surface), tempfile.TemporaryDirectory() as tmp:
+                repo = new_repo(Path(tmp))
+                if surface == "name":
+                    git(repo, "config", "user.name", PLANTED)
+                if surface == "email":
+                    git(repo, "config", "user.email", PLANTED + "@example.invalid")
+                commit(repo, PLANTED + ".md" if surface == "path" else "notes.md",
+                       "safe text\n", PLANTED if surface == "message" else "safe message")
+                if surface == "tag":
+                    git(repo, "tag", "-a", "v1", "-m", PLANTED)
+                p = run(["-c", SCAN_WITH_PLANTED_DIGEST], repo)
+                self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+                self.assertIn(PLANTED_KIND, p.stdout)
+                self.assertNotIn(PLANTED, p.stdout + p.stderr)
+
     def test_this_repository_history_is_clean(self):
         # Fails on any history that predates the fresh public root; the public root scans clean.
         p = run([str(SCAN)], ROOT)

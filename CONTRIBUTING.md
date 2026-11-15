@@ -14,6 +14,7 @@ Thanks for looking. This file says how to get a change in and what the gates are
     cd chaos-trader
     python -m venv .venv
     .venv/bin/pip install -e .        # Windows: .venv\Scripts\pip install -e .
+    git config --local core.hooksPath .githooks
     make verify PY=.venv/bin/python   # Windows: make verify PY=.venv/Scripts/python
 
 `make verify` is the one command. Pass `PY` so it uses the venv; without it, `make` uses whatever `python` is first on PATH.
@@ -52,6 +53,8 @@ CI runs the same checks on Python 3.11 and 3.14, then builds the wheel, checks i
 ## Commits
 
 - One logical change per commit, with a `feat:`, `fix:`, `docs:`, `test:`, `build:`, `ci:`, or `chore:` prefix.
+- Set a public Git name and your own GitHub no-reply email with repository-local `user.name` and `user.email` settings before committing.
+- The opt-in pre-push hook scans reachable blobs, commit/tag metadata, and historical filenames for the configured private-name fingerprints. It does not replace the secret scanner or guarantee that every possible private value is detected. Install it in each clone; Git does not install hooks automatically.
 - Do not force-push to `main`.
 
 ## Releases
