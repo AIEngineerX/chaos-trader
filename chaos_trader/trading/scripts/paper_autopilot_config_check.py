@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -45,12 +46,55 @@ FORBIDDEN_LIVE_CAPABILITIES = {"swap", "snipe", "execute", "route", "sign", "sub
 def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
     if yaml is None:
         raise SystemExit("PyYAML unavailable; cannot parse paper_autopilot.yaml")
-    return yaml.safe_load(path.read_text()) or {}
+    return yaml.safe_load(path.read_text())
 
 
-def validate(config: dict[str, Any]) -> dict[str, Any]:
+def validate(config: Any) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
+    if not isinstance(config, dict):
+        errors.append("config must be a mapping")
+        config = {}
+    else:
+        config = dict(config)  # never repair the caller's config in place
+    sections = ("policy", "boundary", "paths", "loop", "budgets", "pre_filter",
+                "deep_analyze", "market_discovery", "x_research", "paper_size",
+                "entry", "exit", "paper_fee_model", "risk", "llm", "logging")
+    for section in sections:
+        if section in config and not isinstance(config[section], dict):
+            errors.append(section + " must be a mapping, not " + type(config[section]).__name__)
+            config[section] = {}
+    for section, key in (("loop", "position_refresh_sec"), ("exit", "exit_on_gate_flip"), ("exit", "exit_on_flow_conversion")):
+        if key in config.get(section, {}):
+            errors.append(section + "." + key + " is unsupported; remove this setting (it never controlled runtime behavior)")
+
+    def numeric(section: str, key: str, *, low: float, high: float = math.inf, integer: bool = False, strict_low: bool = False, strict_high: bool = False) -> None:
+        values = config.get(section, {})
+        if key not in values:
+            return  # supported runtime defaults remain usable
+        value = values[key]
+        valid = type(value) is int if integer else type(value) in (int, float)
+        if valid:
+            try:
+                valid = math.isfinite(value) and (value > low if strict_low else value >= low) and (value < high if strict_high else value <= high)
+            except (OverflowError, TypeError):
+                valid = False
+        if not valid:
+            kind = "integer" if integer else "number"
+            errors.append(f"{section}.{key} must be a finite {kind} in {'(' if strict_low else '['}{low}, {high}{')' if strict_high else ']'}")
+
+    for key in ("max_candidates", "max_open_positions", "max_new_entries_per_hour", "max_new_entries_per_day", "max_same_source_positions", "max_same_narrative_positions"):
+        numeric("budgets", key, low=0, integer=True)
+    for section in ("deep_analyze", "x_research"):
+        for key in ("max_per_day", "max_per_hour"):
+            numeric(section, key, low=0, integer=True)
+    numeric("loop", "discovery_interval_sec", low=0, integer=True, strict_low=True)
+    for key in ("stop_pct_conviction", "stop_pct_low_cap", "trailing_stop_after_tp1_pct", "liquidity_break_pct"):
+        numeric("exit", key, low=-100, high=0, strict_high=True)
+    for key in ("tp1_trim_pct", "tp2_trim_pct"):
+        numeric("exit", key, low=0, high=100, strict_low=True)
+    for key in ("tp1_pct", "tp2_pct", "low_cap_time_stop_min", "conviction_time_stop_min"):
+        numeric("exit", key, low=0, strict_low=True)
     if config.get("mode") != "paper_only":
         errors.append("mode must be paper_only")
     if (config.get("loop") or {}).get("enabled") is not False:
@@ -100,10 +144,10 @@ def validate(config: dict[str, Any]) -> dict[str, Any]:
     elif entry["wallet_signal_lane_enabled"]:
         warnings.append("entry.wallet_signal_lane_enabled is true; paper entries may cite wallet evidence as their reason")
     x = config.get("x_research") or {}
-    if int(x.get("max_per_day") or 0) > 100:
+    if type(x.get("max_per_day")) in (int, float) and x["max_per_day"] > 100:
         warnings.append("x_research.max_per_day > 100; likely too expensive/noisy")
     deep = config.get("deep_analyze") or {}
-    if int(deep.get("max_per_day") or 0) > 250:
+    if type(deep.get("max_per_day")) in (int, float) and deep["max_per_day"] > 250:
         warnings.append("deep_analyze.max_per_day > 250; likely too much API pressure")
     return {
         "ok": not errors,
@@ -120,7 +164,12 @@ def validate(config: dict[str, Any]) -> dict[str, Any]:
 
 def main() -> None:
     path = Path(sys.argv[1]).expanduser() if len(sys.argv) > 1 else CONFIG_PATH
-    payload = validate(load_config(path))
+    try:
+        payload = validate(load_config(path))
+    except (OSError, ValueError) as exc:
+        payload = {"ok": False, "errors": [f"cannot load config: {exc}"], "warnings": []}
+    except yaml.YAMLError as exc:
+        payload = {"ok": False, "errors": [f"cannot parse config: {exc}"], "warnings": []}
     print(json.dumps(payload, indent=2, sort_keys=True))
     if not payload["ok"]:
         raise SystemExit(1)

@@ -15,6 +15,7 @@ explicit start command; config default remains loop.enabled=false.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 import argparse
 import copy
 import json
@@ -283,6 +284,23 @@ def parse_utc(value: Any) -> datetime | None:
         return None
 
 
+@contextmanager
+def atomic_transition(con: sqlite3.Connection):
+    """Roll back only this unit, not earlier completed work or its error event."""
+    name = "transition_" + uuid.uuid4().hex
+    con.execute(f"SAVEPOINT {name}")
+    try:
+        # Acquire the writer lock before reading policy/accounting state. This
+        # prevents stale reads followed by a failed WAL snapshot upgrade.
+        con.execute("UPDATE budget_counters SET value=value WHERE 0")
+        yield
+    except BaseException:
+        con.execute(f"ROLLBACK TO SAVEPOINT {name}")
+        raise
+    finally:
+        con.execute(f"RELEASE SAVEPOINT {name}")
+
+
 class ClosingConnection(sqlite3.Connection):
     """Connection whose `with` block also closes it; open handles keep the DB file locked on Windows."""
 
@@ -531,7 +549,7 @@ class PaperAutopilotRunner:
         )
         return self.get_counter(con, counter)
 
-    def discover(self, con: sqlite3.Connection, *, limit: int | None = None) -> list[dict[str, Any]]:
+    def discover(self, con: sqlite3.Connection, *, limit: int | None = None, health: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         max_candidates = int(limit or self.config.get("budgets", "max_candidates", default=25))
         payload = sweep_payload(limit=max_candidates, dex=True)
         if not payload.get("ok"):
@@ -620,6 +638,9 @@ class PaperAutopilotRunner:
             )
             discovered.append(row)
         self.log_event(con, "discovery", message=f"{len(discovered)} candidates", payload={"count": len(discovered), "freshness": payload.get("freshness"), "market_discovery": market_meta, "tape_errors": payload.get("errors") or []})
+        if health is not None:
+            failed = bool(not payload.get("ok") or payload.get("errors") or market_meta.get("error") or market_meta.get("errors"))
+            health.update(attempted=1, succeeded=int(not failed), failed=int(failed), deferred=0)
         return discovered
 
     def market_probe_confirmation(self, con: sqlite3.Connection, mint: str) -> dict[str, Any]:
@@ -1091,8 +1112,35 @@ class PaperAutopilotRunner:
                 "paper_plan": {"required_trigger": ["fresh independent elite-wallet consensus before deep analysis"]},
                 "boundary": BOUNDARY,
             }
-            self.persist_decision(con, decision, expected_mint=mint)
+            with atomic_transition(con):
+                self.persist_decision(con, decision, expected_mint=mint)
             return decision
+        # Reservations are committed before the irreversible analyzer boundary;
+        # paper accounting below has a separate rollback boundary.
+        with atomic_transition(con):
+            reservation = self.reserve_analysis(con, mint, use_x=use_x)
+        con.commit()
+        if not reservation["ok"]:
+            return reservation
+        x_enabled = reservation["x_enabled"]
+        payload = self.run_analyze(mint, x_enabled=x_enabled, timeout=analyze_timeout)
+        # Only an explicit negative receipt proves no X request was dispatched.
+        # Missing/malformed receipts and exceptions retain the reservation.
+        if x_enabled and payload.get("x_request_made") is False:
+            with atomic_transition(con):
+                con.execute("UPDATE budget_counters SET value=value-1 WHERE day_utc=? AND counter='x_search' AND value>0", (reservation["day"],))
+                con.execute("UPDATE events SET event_type='x_search_not_requested' WHERE id=?", (reservation["x_event_id"],))
+            con.commit()
+        with atomic_transition(con):
+            return self.decide_analyzed_payload(
+                con, mint, payload, x_enabled=x_enabled, wallet_lane=wallet_lane,
+                source_confirmation=source_confirmation, market_confirmation=market_confirmation,
+                single_a_probe=single_a_probe, market_probe=market_probe,
+                elite_wallets=elite_wallets, elite_weighted_score=elite_weighted_score,
+                min_elite_wallets=min_elite_wallets, min_elite_weighted_score=min_elite_weighted_score)
+
+    def reserve_analysis(self, con: sqlite3.Connection, mint: str, *, use_x: bool) -> dict[str, Any]:
+        """Caller must hold the writer lock and commit before dispatch."""
         deep_max = int(self.config.get("deep_analyze", "max_per_day", default=100))
         if not self.budget_available(con, "deep_analyze", deep_max):
             return {"ok": False, "decision": "budget_exhausted", "mint": mint, "boundary": BOUNDARY}
@@ -1103,12 +1151,22 @@ class PaperAutopilotRunner:
         x_max = int(self.config.get("x_research", "max_per_day", default=25))
         x_hour_max = int(self.config.get("x_research", "max_per_hour", default=999999))
         x_enabled = bool(use_x) and self.budget_available(con, "x_search", x_max) and self._event_count_since(con, "x_search", hour_cutoff) < x_hour_max
-        payload = self.run_analyze(mint, x_enabled=x_enabled, timeout=analyze_timeout)
-        self.inc_counter(con, "deep_analyze")
-        self.log_event(con, "deep_analyze", mint=mint, message="deep analyze consumed", payload={"x_enabled": x_enabled})
-        if payload.get("x_request_made"):  # D2: charged only when a request actually reached the provider
-            self.inc_counter(con, "x_search")
-            self.log_event(con, "x_search", mint=mint, message="x search consumed", payload={})
+        day = today_utc()
+        for counter in (["deep_analyze", "x_search"] if x_enabled else ["deep_analyze"]):
+            con.execute("INSERT INTO budget_counters(day_utc,counter,value) VALUES(?,?,1) ON CONFLICT(day_utc,counter) DO UPDATE SET value=value+1", (day, counter))
+            self.log_event(con, counter, mint=mint, message="request budget reserved before dispatch", payload={"x_enabled": x_enabled})
+        x_event_id = con.execute("SELECT last_insert_rowid()").fetchone()[0] if x_enabled else None
+        return {"ok": True, "x_enabled": x_enabled, "day": day, "x_event_id": x_event_id}
+
+    def decide_analyzed_payload(self, con: sqlite3.Connection, mint: str, payload: dict[str, Any], *,
+                                x_enabled: bool, wallet_lane: bool, source_confirmation: dict[str, Any],
+                                market_confirmation: dict[str, Any], single_a_probe: bool, market_probe: bool,
+                                elite_wallets: int, elite_weighted_score: int,
+                                min_elite_wallets: int, min_elite_weighted_score: int) -> dict[str, Any]:
+        # Another runner may finish this mint while our analyzer is in flight.
+        # Recheck under the accounting writer lock, not the earlier selection.
+        if con.execute("SELECT 1 FROM paper_positions WHERE mint=? LIMIT 1", (mint,)).fetchone():
+            return {"ok": True, "mint": mint, "decision": "already_processed", "boundary": BOUNDARY}
         if str(payload.get("mint") or "") != mint:
             return self.identity_mismatch_decision(con, mint, payload.get("mint"), "analyzer", x_enabled=x_enabled)
         payload.pop("source_confirmation", None)
@@ -1613,7 +1671,7 @@ class PaperAutopilotRunner:
                 self.close_position(con, row, reason="pair_gone", market=market, return_pct=-100.0)
                 return "closed"
             self.log_event(con, "position_monitor_check", mint=row.get("mint"), position_id=row.get("id"), message="market refresh missing price/mcap", payload=market)
-            return "checked"
+            return "unavailable"
         if entry_liq and (liq is None or liq < NON_EXITABLE_LIQUIDITY_USD):
             # The pool the position entered is drained: its last price is not a price anyone can sell at.
             self.close_position(con, row, reason="non_exitable", market=market, return_pct=-100.0)
@@ -1656,52 +1714,90 @@ class PaperAutopilotRunner:
         self.log_event(con, "position_monitor_check", mint=row.get("mint"), position_id=row.get("id"), message="hold", payload={"return_pct": return_pct, "market": market})
         return "checked"
 
-    def monitor_positions_once(self, con: sqlite3.Connection) -> list[dict[str, Any]]:
+    def monitor_positions_once(self, con: sqlite3.Connection, *, health: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         rows = [dict(r) for r in con.execute("SELECT * FROM paper_positions WHERE state IN ('PAPER_OPEN','PAPER_TRIMMED') ORDER BY opened_at_utc").fetchall()]
+        if health is None:
+            health = {}
+        health.update(attempted=0, succeeded=0, failed=0, deferred=0)
         for row in rows:
+            health["attempted"] += 1
             try:
-                market = self.fetch_market(str(row.get("mint")))
-                self.evaluate_position(con, row, market)
+                with atomic_transition(con):
+                    # Another connection may have trimmed/closed since selection.
+                    row = dict(con.execute("SELECT * FROM paper_positions WHERE id=?", (row["id"],)).fetchone())
+                    if row["state"] not in {"PAPER_OPEN", "PAPER_TRIMMED"}:
+                        result = "checked"
+                    else:
+                        market = self.fetch_market(str(row.get("mint")))
+                        result = self.evaluate_position(con, row, market)
             except Exception as exc:
+                health["failed"] += 1
                 self.log_event(con, "position_monitor_error", mint=row.get("mint"), position_id=row.get("id"), message=str(exc)[:500], payload={})
+            else:
+                health["failed" if result == "unavailable" else "succeeded"] += 1
             con.commit()
         return rows
 
     def run_once(self, *, limit: int | None = None, analyze_top: int = 0, with_x: bool = False, budget_seconds: float | None = None) -> dict[str, Any]:
         with_x = bool(with_x) and x_provider.provider_name() != "none"  # D3: no provider is X off
         deadline = time.monotonic() + budget_seconds if budget_seconds is not None else None
+        stages: dict[str, dict[str, Any]] = {name: {"attempted": 0, "succeeded": 0, "failed": 0, "deferred": 0}
+                  for name in ("monitor", "discovery", "candidates")}
         with self.connect() as con:
             # Open positions come first and every step is committed as it ends, so a tick that is stopped
             # part-way keeps the exits and decisions it already booked.
-            open_positions = self.monitor_positions_once(con)
-            discovered = self.discover(con, limit=limit)
+            self.monitor_positions_once(con, health=stages["monitor"])
+            stages["discovery"]["attempted"] = 1
+            try:
+                with atomic_transition(con):
+                    discovered = self.discover(con, limit=limit, health=stages["discovery"])
+            except sqlite3.DatabaseError:
+                raise  # retain corrupt-database diagnostics and fail closed
+            except Exception as exc:
+                discovered = []
+                stages["discovery"]["failed"] = 1
+                self.log_event(con, "discovery_error", message=str(exc)[:500], payload={})
             con.commit()
             decisions: list[dict[str, Any]] = []
             if analyze_top > 0:
-                for c in self.active_candidates(con, limit=analyze_top, with_x=with_x):
+                candidates = self.active_candidates(con, limit=analyze_top, with_x=with_x)
+                for index, c in enumerate(candidates):
                     analyze_timeout = float(ANALYZE_TIMEOUT_SECONDS)
                     if deadline is not None:
                         left = deadline - time.monotonic()
                         if left <= 0:
+                            stages["candidates"]["deferred"] += len(candidates) - index
                             self.log_event(con, "tick_budget_exhausted", mint=c.get("mint"), message="decision left for the next tick", payload={"budget_seconds": budget_seconds})
                             con.commit()
                             break
                         analyze_timeout = min(analyze_timeout, left)
+                    stages["candidates"]["attempted"] += 1
                     try:
-                        decisions.append(self.decide_candidate(con, c["mint"], use_x=with_x, analyze_timeout=analyze_timeout))
+                        decision = self.decide_candidate(con, c["mint"], use_x=with_x, analyze_timeout=analyze_timeout)
+                        decisions.append(decision)
                     except Exception as exc:
                         self.log_event(con, "deep_analyze_error", mint=c.get("mint"), message=str(exc)[:500], payload={})
                         decisions.append({"ok": False, "mint": c.get("mint"), "decision": "error", "error": str(exc)[:500]})
+                    decision = decisions[-1]
+                    outcome = "deferred" if decision.get("decision") == "budget_exhausted" else "failed" if decision.get("ok") is False or decision.get("decision") == "error" else "succeeded"
+                    stages["candidates"][outcome] += 1
                     con.commit()
             summary = self.status(con)
+        errors = sum(stage["failed"] for stage in stages.values())
+        for stage in stages.values():
+            stage["status"] = "degraded" if stage["failed"] else "deferred" if stage["deferred"] else "ok"
         return {
-            "ok": True,
+            "ok": errors == 0,
+            "health": "degraded" if errors else "deferred" if any(s["deferred"] for s in stages.values()) else "ok",
+            "error_count": errors,
+            "stages": stages,
             "mode": "paper_autopilot_run_once",
             "generated_at_utc": now_utc(),
             "boundary": BOUNDARY,
             "discovered": len(discovered),
             "decisions": decisions,
-            "open_positions_checked": len(open_positions),
+            "open_positions_checked": stages["monitor"]["succeeded"],
+            "open_positions_attempted": stages["monitor"]["attempted"],
             "status": summary,
         }
 
@@ -1747,15 +1843,17 @@ class PaperAutopilotRunner:
             raise SystemExit("loop.enabled=false; use --once or --max-cycles for bounded paper dry run")
         interval = int(self.config.get("loop", "discovery_interval_sec", default=30))
         cycles = 0
+        failed_cycles = 0
         last: dict[str, Any] | None = None
         while True:
             cycles += 1
             last = self.run_once(analyze_top=analyze_top, with_x=with_x)
-            print(json.dumps({"cycle": cycles, "discovered": last.get("discovered"), "open_positions_checked": last.get("open_positions_checked"), "boundary": BOUNDARY}, sort_keys=True), flush=True)
+            failed_cycles += int(not last.get("ok", False))
+            print(json.dumps({"cycle": cycles, "ok": last.get("ok"), "health": last.get("health"), "error_count": last.get("error_count"), "discovered": last.get("discovered"), "open_positions_checked": last.get("open_positions_checked"), "boundary": BOUNDARY}, sort_keys=True), flush=True)
             if max_cycles is not None and cycles >= max_cycles:
                 break
             time.sleep(max(1, interval))
-        return {"ok": True, "cycles": cycles, "last": last, "boundary": BOUNDARY}
+        return {"ok": failed_cycles == 0, "cycles": cycles, "failed_cycles": failed_cycles, "last": last, "boundary": BOUNDARY}
 
 
 def compact(payload: dict[str, Any]) -> str:
@@ -1769,12 +1867,15 @@ def compact(payload: dict[str, Any]) -> str:
             f"Counters: {payload.get('today_counters')}",
             BOUNDARY,
         ])
+    if "last" in payload:
+        return f"Cycles: {payload['cycles']} | Failed cycles: {payload['failed_cycles']}\n" + compact(payload["last"])
     return "\n".join([
         "☄️ PAPER AUTOPILOT RUN",
         f"Mode: {payload.get('mode')}",
         f"Discovered: {payload.get('discovered')}",
         f"Decisions: {len(payload.get('decisions') or [])}",
-        f"Errors: {sum(1 for d in payload.get('decisions') or [] if d.get('decision') == 'error')}",
+        f"Errors: {payload.get('error_count', 0)}",
+        f"Health: {payload.get('health', 'unknown')}",
         f"Open positions checked: {payload.get('open_positions_checked')}",
         BOUNDARY,
     ])
@@ -1809,7 +1910,7 @@ def main() -> None:
     except sqlite3.DatabaseError as exc:  # wherever this platform's SQLite first notices the damage
         raise SystemExit(db_failure(exc, [(runner.db_path, REFILL_PAPER_BOOK), (DEFAULT_SMART_WALLET_DB, REFILL_WALLETS)]))
     print(json.dumps(out, indent=2, sort_keys=True, ensure_ascii=False, default=str) if args.raw else compact(out))
-    raise SystemExit(1 if any(d.get("decision") == "error" for d in out.get("decisions") or []) else 0)
+    raise SystemExit(0 if out.get("ok") else 1)
 
 
 if __name__ == "__main__":

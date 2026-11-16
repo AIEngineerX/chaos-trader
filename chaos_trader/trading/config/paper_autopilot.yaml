@@ -34,7 +34,7 @@ loop:
   enabled: false
   discovery_interval_sec: 30
   candidate_refresh_sec: 10
-  position_refresh_sec: 5
+  # Positions are monitored once per tick; there is no independent refresh cadence.
   outcome_windows:
   - 15m
   - 1h
@@ -142,12 +142,7 @@ exit:
   low_cap_time_stop_min: 15
   conviction_time_stop_min: 25
   liquidity_break_pct: -25
-  exit_on_gate_flip:
-  - avoid-entry
-  - exit-liquidity-watch
-  exit_on_flow_conversion:
-  - dead-churn
-  - exit-liquidity-churn
+  # Gate/flow-triggered exits are not implemented; do not configure them.
 paper_fee_model:
   estimated: true
   provenance: paper-only conservative fixed-bps estimate; not execution quote

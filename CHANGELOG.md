@@ -4,6 +4,11 @@ All notable changes to this package. Dates are UTC.
 
 ## Unreleased
 
+- Paper request budgets are committed before analysis and survive accounting rollback/restart; uncertain requests retain conservative reservations. SQLite writer-locked checks prevent overlapping runners from exceeding shared request caps or duplicating entry/trim/close accounting. Offline retry and multiprocess lifecycle regressions cover these boundaries.
+
+- Paper candidate and position transitions now roll back failed SQLite work without losing earlier completed transitions; failure events are saved separately. Tick health includes discovery, candidate, and position failures, with successful position checks counted separately from attempts and nonzero CLI status for degraded ticks.
+- Paper configuration rejects malformed sections, invalid open-position limits/conviction stops, and unsupported `position_refresh_sec`, `exit_on_gate_flip`, and `exit_on_flow_conversion` controls. The shipped config removes those unused keys; see [paper reliability](docs/paper-reliability.md) for migration and health fields.
+
 ## 0.1.1 — 2026-11-13
 
 - `chaos outcomes` counts a mark taken with the pool under $1,000 as a 100% fall, as it already did a pair gone from DexScreener. Before, such a mark kept its last price in the median and in the share that went up, so twenty reads whose pools had all drained could show a rise. For `avoid-entry` and `exit-liquidity-watch` the share caught now equals the share that fell 70% or more.
