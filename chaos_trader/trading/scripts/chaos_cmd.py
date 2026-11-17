@@ -1168,6 +1168,7 @@ Commands, run as `chaos <command>`:
 - wallets --add <address> --tier A|B|C  (add a wallet to the home roster; no chain call)
 - wallets --remove <address>    (drop a wallet from the home roster)
 - skills list | install --for claude|codex|hermes|all  (shipped agent skills; `chaos skills install --dry-run` writes nothing)
+- readiness [--max-age-seconds 3600]  (JSON persisted readiness; no network or state writes; works before onboard)
 - run <script> [args]           (run a pipeline script, job, or skill helper by name; `chaos run` alone lists them)
 - mcp                           (read-only MCP server on stdio with nine tools over these commands; needs the mcp extra)
 - --version                     (print the package version)

@@ -26,6 +26,8 @@ USAGE = """chaos-trader
       create DIR (default ~/.chaos-trader) with .env, the seed roster, the paper config, and the data folders
   chaos update [--home DIR]
       refresh the default paper config beside yours; code updates come from pip
+  chaos readiness [--max-age-seconds 3600]
+      JSON readiness from persisted evidence only; works before onboard, never fetches or writes state
   chaos run <script> [args...]
       run one pipeline script or job from the package by file name without .py; `chaos run` alone lists them
   chaos skills list
@@ -219,6 +221,9 @@ def main(argv: list[str] | None = None) -> int:
         return _update(argv[1:])
     if argv[0] == "skills":
         return _skills(argv[1:])
+    if argv[0] == "readiness":
+        # Unlike producers, this diagnostic must work before onboard, without writes.
+        return subprocess.call([sys.executable, "-B", str(SCRIPTS / "chaos_status.py"), "--readiness", *argv[1:]], env=_script_env(chaos_home()))
     if argv[0] == "run":
         return _run_script(argv[1:])
     if argv[0] == "mcp":

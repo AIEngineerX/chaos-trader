@@ -104,6 +104,20 @@ def _paper_status() -> dict:
 
 
 def main() -> None:
+    import sys
+    if "--readiness" in sys.argv[1:]:
+        import argparse
+        from operational_readiness import report
+        from json_contract import envelope
+        parser = argparse.ArgumentParser(description="Read-only persisted operational readiness (JSON).")
+        parser.add_argument("--readiness", action="store_true")
+        parser.add_argument("--json", action="store_true", help="JSON is the default and only output format")
+        parser.add_argument("--max-age-seconds", type=int, default=3600)
+        args = parser.parse_args()
+        if args.max_age_seconds <= 0:
+            parser.error("--max-age-seconds must be positive")
+        print(json.dumps(envelope("readiness", report(PROFILE_HOME, max_age_seconds=args.max_age_seconds)), sort_keys=True))
+        return
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "cron_jobs": "none" if not (PROFILE_HOME / "cron" / "jobs.json").exists() else "check cron list",

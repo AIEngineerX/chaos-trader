@@ -112,6 +112,19 @@ Six commands read data they do not fill themselves. On a fresh home, four of the
 | `chaos wallets --discover 5` | the discovery queue in `smart_wallets.sqlite` | the Helius wallet API, through `chaos run smart_wallet_tracker <wallet address>` on a Helius RPC with `HELIUS_API_KEY` set; the ingest job does not fill it |
 | `chaos wallets --review` | Each roster wallet's events, positions, and newest tracker score in `smart_wallets.sqlite` | The elite ingest job. Until its first completed run the command prints `No ingest yet`. Scores come from `chaos run smart_wallet_tracker` |
 
+## Operational readiness (read-only)
+
+`chaos readiness` prints the standard JSON envelope from persisted local evidence. It works before
+`chaos onboard`, does not create the home or databases, and does not call providers, run producers,
+write reports, or change schedules. `chaos readiness --max-age-seconds 3600` sets the freshness window
+(default one hour; a diagnostic threshold, not a scheduling recommendation). Exit 0 means a report
+was produced, **not** that the system is ready; consumers must inspect component states. Invalid
+arguments exit 2.
+
+The report separates the elite wallet ingest producer, the autopilot book, and the elite paper book.
+It does not replace `chaos paper-report` (which writes a learning report), or claim provider,
+deployment, credential, or scheduler readiness. See [the evidence mapping and limitations](docs/readiness.md).
+
 ## Configuration
 
 Everything lives in one folder, `CHAOS_HOME`. The `chaos` verbs write only under `CHAOS_HOME` (plus `chaos skills install`, which writes the harness skill folders it prints, and `--force` can replace a same-named skill folder there). Scripts run through `chaos run` default to `CHAOS_HOME` but write wherever their own output flags (`--db`, `--out`, `--out-dir`, `--report-dir`, `--root`, `--out-prefix`, `--evidence-db`) or the `CHAOS_*_ROOT` env overrides point. `CHAOS_HOME/trading/cache/holders/` keeps the last largest-holder sample for each mint and sample size read on a keyed RPC and is safe to delete. The public RPC never fills it, because it does not serve that read. A sample a keyed RPC cached in the last 15 minutes is still used when a later read of that mint fails, including the public RPC's not-served refusal. A file there that does not read as a sample is ignored, and a cache that cannot be written does not fail the read.
