@@ -4,6 +4,8 @@
 
 A trader-agent research stack for Solana: reads wallets, ranks tokens, runs paper trading, and ships agent skills. This release does not sign, route, or send transactions.
 
+Product status, remaining acceptance gates, and the ordered backlog: [roadmap](docs/roadmap.md).
+
 ## 60-second path
 
     pip install chaos-trader
