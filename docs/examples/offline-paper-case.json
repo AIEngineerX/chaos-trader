@@ -1,0 +1,62 @@
+{
+  "kind": "offline_synthetic_paper_case",
+  "warning": "Synthetic external inputs; real paper engine execution. Not live market evidence, profitability, ingestion validation, or production readiness.",
+  "case": "synthetic-token-1",
+  "evidence": {
+    "market": {
+      "liquidity_usd": 60000.0,
+      "market_cap": 180000.0,
+      "price_usd": 0.001
+    },
+    "independent_wallet_count": 2,
+    "x_enabled": false
+  },
+  "initial_decision": {
+    "decision": "paper_wait",
+    "blockers": [
+      "elite source consensus below minimum: 0/1 independent wallets",
+      "elite tier weight below minimum: 0/1",
+      "market probe: market sweep hits 1"
+    ]
+  },
+  "entry_decision": {
+    "decision": "paper_enter",
+    "reasons": [
+      "entry gate watch",
+      "liquidity supports paper sizing: $60,000",
+      "wallet timing/watch evidence: 2"
+    ],
+    "blockers": [],
+    "paper_lane": "elite_consensus",
+    "versions": {
+      "analyzer_version": "token_event_analyzer_p0_v1",
+      "fee_model_version": "paper_fee_model_p0_v1",
+      "policy_version": "paper_policy_p0_v4_multilane",
+      "source_roster_version": "source_roster_p0_v1",
+      "strategy_version": "strategy_paper_engine_p0_v1"
+    }
+  },
+  "paper_action": {
+    "state": "PAPER_CLOSED",
+    "simulated_notional_usd": 100.0,
+    "entry_price": 0.0010149999999999998,
+    "remaining_pct": 0.0,
+    "exit_reason": "liquidity_break",
+    "realized_r": -2.118522
+  },
+  "accounting": {
+    "fills": 2,
+    "positions": {
+      "closed": 1,
+      "open": 0,
+      "realized_r": -2.118522,
+      "total": 1
+    }
+  },
+  "outcomes": {
+    "window": "24h",
+    "scored_reads": 0,
+    "scored_mints": 0,
+    "status": "No mature forward-window samples; paper accounting is a separate measurement."
+  }
+}

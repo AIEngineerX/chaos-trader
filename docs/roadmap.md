@@ -19,7 +19,7 @@ Build on existing tests and contracts rather than introducing a competing framew
 - Existing `test_paper_retry.py` covers restart/duplicate and concurrent-process entry/trim/close and caps; `test_paper_reliability.py` covers real SQLite failure rollback. Extend only uncovered scenarios below, not duplicate harnesses.
 
 - [ ] Exercise ingestion, tape, analysis, ledger, effective decision, actual paper opening, monitoring, trim/exit, and outcome reporting through real CLI processes and temporary SQLite databases.
-- [ ] Cover rejection and position-cap refusal; a proposed entry must not count as an opened position.
+- [x] Cover rejection and position-cap refusal; returned decisions, persisted candidate state and events agree on `paper_wait`, with no position/fill created. See the real-run [sanitized case](examples/offline-paper-case.json) for evidence-to-outcome linkage and explicit missing forward-window samples.
 - [ ] Cover duplicate, reordered, late, stale, unavailable, and wrong-mint evidence without using information unavailable at decision time.
 - [ ] Exercise interrupted writes, restart, lock contention, concurrent invocations, and corrupt storage. Assert conservation and no duplicate accounting.
 - [ ] Verify clean installation, upgrade, and restore using the built wheel, not only an editable checkout.
