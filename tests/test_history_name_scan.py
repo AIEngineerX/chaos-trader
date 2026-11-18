@@ -82,6 +82,48 @@ class HistoryNameScanTests(unittest.TestCase):
                 self.assertIn(PLANTED_KIND, p.stdout)
                 self.assertNotIn(PLANTED, p.stdout + p.stderr)
 
+    def test_exact_public_commit_identity(self):
+        name = "".join(chr(n) for n in (71, 104, 111, 115, 116))
+        email = "195990077+AIEngineerX@users.noreply.github.com"
+        for role in ("author", "committer", "both"):
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as tmp:
+                repo = new_repo(Path(tmp))
+                commit(repo, "notes.md", "safe text\n", "safe message")
+                env = dict(os.environ)
+                for identity in ("author", "committer"):
+                    prefix = "GIT_" + identity.upper()
+                    env[prefix + "_NAME"] = name if role in (identity, "both") else "Scan Test"
+                    env[prefix + "_EMAIL"] = email if role in (identity, "both") else "scan-test@example.invalid"
+                subprocess.run(["git", "commit", "--amend", "--reset-author", "--no-edit", "-q"],
+                               cwd=repo, env=env, capture_output=True, check=True)
+                p = run([str(SCAN)], repo)
+                self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+
+    def test_public_identity_exception_does_not_hide_private_surfaces(self):
+        name = "".join(chr(n) for n in (71, 104, 111, 115, 116))
+        email = "195990077+AIEngineerX@users.noreply.github.com"
+        for surface in ("other-email", "email-case", "name-case", "extended-name",
+                        "message", "header-in-message", "path", "blob", "private-email", "tag"):
+            with self.subTest(surface=surface), tempfile.TemporaryDirectory() as tmp:
+                repo = new_repo(Path(tmp))
+                git(repo, "config", "user.name", name.lower() if surface == "name-case" else
+                    name + " Extra" if surface == "extended-name" else name)
+                git(repo, "config", "user.email",
+                    "other@example.invalid" if surface == "other-email" else
+                    email.lower() if surface == "email-case" else
+                    name + "@example.invalid" if surface == "private-email" else email)
+                message = name if surface == "message" else (
+                    f"author {name} <{email}> 1700000000 +0000" if surface == "header-in-message"
+                    else "safe message")
+                commit(repo, name + ".md" if surface == "path" else "notes.md",
+                       name if surface == "blob" else "safe text\n", message)
+                if surface == "tag":
+                    git(repo, "tag", "-a", "v1", "-m", "safe message")
+                p = run([str(SCAN)], repo)
+                self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+                self.assertIn("owner first name", p.stdout)
+                self.assertNotIn(name, p.stdout + p.stderr)
+
     def test_this_repository_history_is_clean(self):
         # Fails on any history that predates the fresh public root; the public root scans clean.
         p = run([str(SCAN)], ROOT)

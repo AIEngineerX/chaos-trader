@@ -4,6 +4,8 @@
 
 A trader-agent research stack for Solana: reads wallets, ranks tokens, runs paper trading, and ships agent skills. This release does not sign, route, or send transactions.
 
+Product status, remaining acceptance gates, and the ordered backlog: [roadmap](docs/roadmap.md).
+
 ## 60-second path
 
     pip install chaos-trader
@@ -111,6 +113,19 @@ Six commands read data they do not fill themselves. On a fresh home, four of the
 | `chaos outcomes` | `trading/db/signal_ledger.sqlite`: the token reads and the marks taken after each one | Token reads: each `chaos token`, `chaos analyze token`, `chaos strategy-paper`, deep read in `chaos sweep`, and paper-tick read writes one row. The outcome tick marks each read 15m, 1h, 4h, 24h, 3d, and 7d after it. Until the tick has run, the card says `Outcome tick has not run` |
 | `chaos wallets --discover 5` | the discovery queue in `smart_wallets.sqlite` | the Helius wallet API, through `chaos run smart_wallet_tracker <wallet address>` on a Helius RPC with `HELIUS_API_KEY` set; the ingest job does not fill it |
 | `chaos wallets --review` | Each roster wallet's events, positions, and newest tracker score in `smart_wallets.sqlite` | The elite ingest job. Until its first completed run the command prints `No ingest yet`. Scores come from `chaos run smart_wallet_tracker` |
+
+## Operational readiness (read-only)
+
+`chaos readiness` prints the standard JSON envelope from persisted local evidence. It works before
+`chaos onboard`, does not create the home or databases, and does not call providers, run producers,
+write reports, or change schedules. `chaos readiness --max-age-seconds 3600` sets the freshness window
+(default one hour; a diagnostic threshold, not a scheduling recommendation). Exit 0 means a report
+was produced, **not** that the system is ready; consumers must inspect component states. Invalid
+arguments exit 2.
+
+The report separates the elite wallet ingest producer, the autopilot book, and the elite paper book.
+It does not replace `chaos paper-report` (which writes a learning report), or claim provider,
+deployment, credential, or scheduler readiness. See [the evidence mapping and limitations](docs/readiness.md).
 
 ## Configuration
 

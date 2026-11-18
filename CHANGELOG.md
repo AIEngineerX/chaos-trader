@@ -4,6 +4,8 @@ All notable changes to this package. Dates are UTC.
 
 ## Unreleased
 
+- `chaos readiness` reports persisted elite ingest and separate autopilot/elite book evidence as JSON, without fetching, creating state, or migrating databases. It distinguishes successful idle receipts, stale/failed attempts, missing configuration/data, and unsupported evidence; autopilot complete-tick health remains unknown where no durable receipt exists. See [readiness evidence](docs/readiness.md).
+
 - Paper request budgets are committed before analysis and survive accounting rollback/restart; uncertain requests retain conservative reservations. SQLite writer-locked checks prevent overlapping runners from exceeding shared request caps or duplicating entry/trim/close accounting. Offline retry and multiprocess lifecycle regressions cover these boundaries.
 
 - Paper candidate and position transitions now roll back failed SQLite work without losing earlier completed transitions; failure events are saved separately. Tick health includes discovery, candidate, and position failures, with successful position checks counted separately from attempts and nonzero CLI status for degraded ticks.
