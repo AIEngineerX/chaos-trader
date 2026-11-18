@@ -51,7 +51,7 @@ def main() -> None:
     probe = subprocess.run([sys.executable, "-c", "import chaos_trader; print(chaos_trader.__file__)"],
                            cwd=out, env=env, capture_output=True, text=True, check=True)
     installed = Path(probe.stdout.strip()).resolve()
-    if installed.is_relative_to(ROOT):
+    if installed.is_relative_to(ROOT / "chaos_trader"):
         raise SystemExit("An installed wheel is required, not an editable/source import")
     (out / "installation.txt").write_text(str(installed), encoding="utf-8")
     steps = []

@@ -4,6 +4,8 @@ All notable changes to this package. Dates are UTC.
 
 ## Unreleased
 
+- The offline walkthrough accepts a wheel installed in the documented checkout-local `.venv`, while still rejecting imports from the source package or an editable installation.
+
 - Add an offline installed-wheel paper-agent walkthrough: synthetic external inputs drive real wait/enter decisions, persisted position management and exit, avoid inspection, and accounting reports. See [walkthrough](docs/paper-walkthrough.md).
 
 - Corrupt-book and missing-roster CLI tests compare canonical temporary paths, including on systems whose default temporary directory is a symlink.
