@@ -63,7 +63,7 @@ class PaperAutopilotTickTests(unittest.TestCase):
         self.assertEqual("50", cmd[cmd.index("--limit") + 1])
         self.assertEqual("10", cmd[cmd.index("--analyze-top") + 1])
         self.assertLess(float(cmd[cmd.index("--budget-seconds") + 1]), run.call_args.kwargs["timeout"])
-        self.assertEqual(str(Path(td)), run.call_args.kwargs["env"]["HERMES_HOME"])
+        self.assertEqual(str(Path(td).resolve()), run.call_args.kwargs["env"]["HERMES_HOME"])
 
     def test_a_corrupt_database_fails_the_real_tick_with_one_line(self) -> None:
         # The real job and the real autopilot child on an onboarded home. The child opens the paper book,

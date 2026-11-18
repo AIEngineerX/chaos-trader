@@ -50,7 +50,7 @@ class OnboardedHome(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.tmp = Path(tmp.name)
+        self.tmp = Path(tmp.name).resolve()
         self.home = self.tmp / "home"
         user = self.tmp / "user"
         user.mkdir()
