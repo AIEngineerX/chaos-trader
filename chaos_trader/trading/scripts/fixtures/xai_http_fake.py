@@ -68,7 +68,15 @@ def make_urlopen(config_path: str | Path) -> Callable[..., Any]:
         with open(config["log"], "a", encoding="utf-8") as log:
             log.write(url + "\n")
         if url.startswith(DEX_PREFIX):
+            mint = config.get("mint", "So11111111111111111111111111111111111111112")
+            if config.get("demo") and any(part in url for part in ("token-profiles/", "token-boosts/")):
+                return io.BytesIO(json.dumps([{"chainId": "solana", "tokenAddress": mint}]).encode("utf-8"))
             pair = dex_pair(url.rstrip("/").rsplit("/", 1)[-1])
+            if config.get("demo"):
+                pair["liquidity"]["usd"] = config.get("liquidity_usd", 60000)
+                pair["priceUsd"] = str(config.get("price_usd", 0.001))
+                pair["volume"]["h1"] = 120000
+                pair["priceChange"]["h1"] = 20
             body: Any = {"pairs": [pair]} if "/latest/dex/tokens/" in url else [pair]
             return io.BytesIO(json.dumps(body).encode("utf-8"))
         if url == XAI_URL:
@@ -82,6 +90,8 @@ def make_urlopen(config_path: str | Path) -> Callable[..., Any]:
             call = json.loads(request.data)
             if call.get("method") == "getSignaturesForAddress":
                 reply: dict[str, Any] = {"jsonrpc": "2.0", "id": call.get("id"), "result": []}
+            elif config.get("demo"):
+                reply = {"jsonrpc": "2.0", "id": call.get("id"), "result": {"value": None}}
             else:
                 reply = {"jsonrpc": "2.0", "id": call.get("id"), "error": {"code": -32601, "message": "not served by the test fake"}}
             return io.BytesIO(json.dumps(reply).encode("utf-8"))

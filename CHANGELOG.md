@@ -4,6 +4,8 @@ All notable changes to this package. Dates are UTC.
 
 ## Unreleased
 
+- Add an offline installed-wheel paper-agent walkthrough: synthetic external inputs drive real wait/enter decisions, persisted position management and exit, avoid inspection, and accounting reports. See [walkthrough](docs/paper-walkthrough.md).
+
 - Corrupt-book and missing-roster CLI tests compare canonical temporary paths, including on systems whose default temporary directory is a symlink.
 
 - `chaos readiness` reports persisted elite ingest and separate autopilot/elite book evidence as JSON, without fetching, creating state, or migrating databases. It distinguishes successful idle receipts, stale/failed attempts, missing configuration/data, and unsupported evidence; autopilot complete-tick health remains unknown where no durable receipt exists. See [readiness evidence](docs/readiness.md).

@@ -6,7 +6,7 @@ This is the current product backlog. Checkboxes describe implementation, not dep
 
 - [x] Reliability fixes for paper accounting and request retries are on `main` (`76e296b`). See [paper reliability](paper-reliability.md).
 - [x] Persisted-evidence readiness reporting is implemented and committed (`fecee5d`). See [readiness](readiness.md).
-- [ ] Merge readiness PR #6 after all required checks pass. It is published on `feat/readiness-report`, not on `main`. CI currently reports a commit-metadata history-gate failure; do not bypass the gate.
+- [x] Readiness PR #6 is merged on `main` (`6209b4e`); Python 3.11/3.14 CI passed.
 - [ ] Review dependency PR #5 separately for compatibility and passing checks; it is not part of readiness acceptance.
 
 Historical privacy remediation is owner-managed and separate from this product backlog. This plan does not authorize history rewrites, account changes, or removal of retained references.
@@ -14,6 +14,9 @@ Historical privacy remediation is owner-managed and separate from this product b
 ## Next: end-to-end paper lifecycle replay
 
 Build on existing tests and contracts rather than introducing a competing framework. Keep the autopilot and elite paper books separate.
+
+- [x] Add an [installed-wheel offline walkthrough](paper-walkthrough.md) proving wait, actual entry, monitor/exit, avoid inspection, and persisted accounting with synthetic inputs. Independent operational acceptance remains separate.
+- Existing `test_paper_retry.py` covers restart/duplicate and concurrent-process entry/trim/close and caps; `test_paper_reliability.py` covers real SQLite failure rollback. Extend only uncovered scenarios below, not duplicate harnesses.
 
 - [ ] Exercise ingestion, tape, analysis, ledger, effective decision, actual paper opening, monitoring, trim/exit, and outcome reporting through real CLI processes and temporary SQLite databases.
 - [ ] Cover rejection and position-cap refusal; a proposed entry must not count as an opened position.
@@ -26,7 +29,7 @@ Acceptance: reproducible offline replay, real persisted results, explicit invari
 
 ## Test portability follow-through
 
-- [ ] Normalize expected temporary paths in corrupt-book and missing-roster CLI tests. On macOS, a symlinked system temporary directory can produce equivalent paths with different spellings. Verification currently uses an explicit canonical temporary directory; retain regression coverage for the default environment too.
+- [x] Normalize expected temporary paths in corrupt-book and missing-roster CLI tests; canonical paths now match runtime resolution, including symlinked temporary roots.
 
 ## Readiness follow-through
 

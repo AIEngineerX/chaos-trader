@@ -15,6 +15,10 @@ Product status, remaining acceptance gates, and the ordered backlog: [roadmap](d
 
 That prints a verdict card; the rest of this page explains what is behind it. The token read takes a few seconds on the public RPC; the first ingest is the slow step.
 
+For a no-credentials first-use route through actual paper decisions, a persisted entry,
+monitoring and exit, run the [offline paper-agent walkthrough](docs/paper-walkthrough.md).
+It uses an installed wheel with synthetic external inputs, not live market evidence.
+
 ## What it does
 
 ![chaos-trader in four steps: watch wallets, rank tokens, paper-trade, score the calls; it never signs a transaction](docs/overview.svg)
