@@ -8,6 +8,7 @@ The checks are imported from the tree gates.
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import re
 import subprocess
@@ -97,6 +98,26 @@ def hits_in(text: str) -> list[str]:
     return sorted(kinds)
 
 
+def commit_scan_text(data: bytes) -> str:
+    """Mask only the exact public display name in its paired commit identity.
+
+    Use a case-sensitive digest, unlike the tree gate's lowercase fingerprints.
+    Preserve emails, other headers, and the entire message for ordinary scanning.
+    """
+    headers, separator, message = data.partition(b"\n\n")
+    lines = headers.split(b"\n")
+    for index, line in enumerate(lines):
+        match = re.fullmatch(
+            rb"(author|committer) ([^<>\n]+) "
+            rb"<195990077\+AIEngineerX@users\.noreply\.github\.com> [0-9]+ [+-][0-9]{4}",
+            line,
+        )
+        if (match and hashlib.sha256(match[2]).hexdigest()
+                == "df1bc4984a055e10b2863eb03abf11701cb63a1e2371dc398889e8291812fb80"):
+            lines[index] = line[:match.start(2)] + b"Public Account" + line[match.end(2):]
+    return (b"\n".join(lines) + separator + message).decode("utf-8", "replace")
+
+
 def metadata_hits(tips: list[str] | None = None) -> list[tuple[str, str, str]]:
     """Scan commit/tag metadata and tree names without echoing private values."""
     ids = object_list(tips, names=False)
@@ -106,7 +127,8 @@ def metadata_hits(tips: list[str] | None = None) -> list[tuple[str, str, str]]:
                 if kind in {"commit", "tag", "tree"}}
     hits = []
     for sha, data in read_blobs(sorted(selected)):
-        for kind in hits_in(data.decode("utf-8", "replace")):
+        text = commit_scan_text(data) if selected[sha] == "commit" else data.decode("utf-8", "replace")
+        for kind in hits_in(text):
             hits.append(("<" + selected[sha] + " metadata>", kind, sha))
     return hits
 
