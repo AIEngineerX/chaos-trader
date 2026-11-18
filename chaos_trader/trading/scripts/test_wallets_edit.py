@@ -31,7 +31,7 @@ class WalletsEditTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.home = Path(tmp.name) / "home"
+        self.home = Path(tmp.name).resolve() / "home"
         self.roster = self.home / "trading" / "config" / "roster.json"
         self.roster.parent.mkdir(parents=True)
         shutil.copyfile(SEED, self.roster)

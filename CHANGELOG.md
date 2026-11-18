@@ -4,6 +4,8 @@ All notable changes to this package. Dates are UTC.
 
 ## Unreleased
 
+- Corrupt-book and missing-roster CLI tests compare canonical temporary paths, including on systems whose default temporary directory is a symlink.
+
 - `chaos readiness` reports persisted elite ingest and separate autopilot/elite book evidence as JSON, without fetching, creating state, or migrating databases. It distinguishes successful idle receipts, stale/failed attempts, missing configuration/data, and unsupported evidence; autopilot complete-tick health remains unknown where no durable receipt exists. See [readiness evidence](docs/readiness.md).
 
 - Paper request budgets are committed before analysis and survive accounting rollback/restart; uncertain requests retain conservative reservations. SQLite writer-locked checks prevent overlapping runners from exceeding shared request caps or duplicating entry/trim/close accounting. Offline retry and multiprocess lifecycle regressions cover these boundaries.
