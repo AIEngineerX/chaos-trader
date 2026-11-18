@@ -40,7 +40,9 @@ def database(path):
     # immutable prevents even SQLite sidecar creation. Do not silently ignore a WAL.
     # Only quiescent, checkpointed books are supported by this diagnostic.
     try:
-        path = path.resolve()
+        path = path.resolve(strict=True)
+    except FileNotFoundError:
+        raise EvidenceError("never_produced", "database_missing") from None
     except (OSError, RuntimeError):
         # pathlib reports symlink loops as RuntimeError on older Python versions.
         raise EvidenceError("unreadable", "database_path_unresolvable") from None
