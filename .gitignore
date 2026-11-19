@@ -40,7 +40,15 @@ active_profile
 .hermes_history
 trading/state/
 
+# Private working plans and task notes (public docs/roadmap.md stays tracked)
+/plans/
+/todos/
+/.plans/
+/PLAN.md
+/TODO.md
+
 # Python/runtime
+.venv-*/
 __pycache__/
 *.py[cod]
 .pytest_cache/

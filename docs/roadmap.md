@@ -11,7 +11,7 @@ This is the current product backlog. Checkboxes describe implementation, not dep
 
 Historical privacy remediation is owner-managed and separate from this product backlog. This plan does not authorize history rewrites, account changes, or removal of retained references.
 
-## Next: end-to-end paper lifecycle replay
+## Verified offline paper lifecycle
 
 Build on existing tests and contracts rather than introducing a competing framework. Keep the autopilot and elite paper books separate.
 
@@ -22,7 +22,8 @@ Build on existing tests and contracts rather than introducing a competing framew
 - [x] Cover rejection and position-cap refusal; returned decisions, persisted candidate state and events agree on `paper_wait`, with no position/fill created. See the real-run [sanitized case](examples/offline-paper-case.json) for evidence-to-outcome linkage and explicit missing forward-window samples.
 - [ ] Cover duplicate, reordered, late, stale, unavailable, and wrong-mint evidence without using information unavailable at decision time.
 - [ ] Exercise interrupted writes, restart, lock contention, concurrent invocations, and corrupt storage. Assert conservation and no duplicate accounting.
-- [ ] Verify clean installation, upgrade, and restore using the built wheel, not only an editable checkout.
+- [x] Verify clean installation using the built wheel and the offline walkthrough.
+- [ ] Verify upgrade and restore using the built wheel, not only an editable checkout.
 - [ ] Compare CLI, MCP, and job-wrapper semantics where supported; document unsupported cases explicitly.
 
 Acceptance: reproducible offline replay, real persisted results, explicit invariant assertions, independent review, and a passing full verification run. Unit-test success alone is not operational acceptance.
@@ -30,6 +31,17 @@ Acceptance: reproducible offline replay, real persisted results, explicit invari
 ## Test portability follow-through
 
 - [x] Normalize expected temporary paths in corrupt-book and missing-roster CLI tests; canonical paths now match runtime resolution, including symlinked temporary roots.
+
+## Next milestone: dependable paper operation
+
+The offline journey is verified; real-data unattended operation is not. Prioritize these gaps before additional providers or strategy features. Reuse existing restart/concurrency coverage instead of adding a duplicate test framework.
+
+1. Persist complete-tick receipts: distinguish a completed position-monitoring cycle from ingestion alone, partial failures, stale inputs, and missing evidence.
+2. Verify upgrade, backup/restore, and rollback on installed packages with accounting reconciliation.
+3. Define a separately approved bounded real-data paper trial with duration, sample coverage, resource limits, and failure criteria set before it starts.
+4. Reconcile CLI, MCP, and job-wrapper behavior where their operations overlap.
+
+A release is not operational acceptance or evidence of profitability. Private execution plans and task notes belong in ignored local directories, not this public backlog.
 
 ## Readiness follow-through
 

@@ -2,7 +2,7 @@
 
 All notable changes to this package. Dates are UTC.
 
-## Unreleased
+## 0.1.2 — 2026-11-19
 
 - Full-book entry rejections now return and record `paper_wait` with the open-position-cap blocker before writing candidate/event state, instead of reporting an entry that never opened.
 
