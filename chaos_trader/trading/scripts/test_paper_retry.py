@@ -35,6 +35,27 @@ class RetryTests(unittest.TestCase):
         with runner.connect() as con:
             return tuple(con.execute('SELECT COUNT(*) FROM ' + t).fetchone()[0] for t in ('paper_positions', 'paper_fills', 'paper_fees'))
 
+    def test_full_book_returns_and_persists_wait_with_cap_reason(self):
+        with tempfile.TemporaryDirectory() as td:
+            runner = self.runner(Path(td))
+            runner.config.raw['budgets']['max_open_positions'] = 0
+            out, calls = self.tick(runner)
+            self.assertTrue(out['ok'], out)
+            self.assertEqual(calls, 1)
+            self.assertEqual(self.counts(runner), (0, 0, 0))
+            decision = out['decisions'][0]
+            self.assertEqual(decision['decision'], 'paper_wait')
+            self.assertIn('budgets.max_open_positions reached', decision['blockers'])
+            with runner.connect() as con:
+                row = con.execute('SELECT state, last_decision FROM candidates WHERE mint=?', (MINT,)).fetchone()
+                self.assertEqual(tuple(row), ('PAPER_WAIT', 'paper_wait'))
+                self.assertEqual(con.execute("SELECT COUNT(*) FROM events WHERE event_type IN ('paper_enter', 'paper_position_open')").fetchone()[0], 0)
+                events = con.execute("SELECT payload_json FROM events WHERE event_type='paper_wait'").fetchall()
+                self.assertEqual(len(events), 1)
+                payload = json.loads(events[0][0])
+                self.assertEqual(payload['decision'], 'paper_wait')
+                self.assertIn('budgets.max_open_positions reached', payload['blockers'])
+
     def test_failed_entry_consumes_durable_hourly_and_daily_reservations(self):
         for cap in ('max_per_hour', 'max_per_day'):
             with self.subTest(cap=cap), tempfile.TemporaryDirectory() as td:

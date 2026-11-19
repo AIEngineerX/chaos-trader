@@ -29,7 +29,7 @@ class PaperLearningReportTests(unittest.TestCase):
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.home = Path(tmp.name) / "home"
+        self.home = Path(tmp.name).resolve() / "home"
         self.book = self.home / "trading" / "db" / "paper_autopilot.sqlite"
         self.book.parent.mkdir(parents=True)
         self.env = {k: v for k, v in os.environ.items() if k not in ("CHAOS_PROFILE_HOME", "HERMES_HOME")}

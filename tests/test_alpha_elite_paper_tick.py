@@ -43,7 +43,7 @@ class AlphaElitePaperTickTests(unittest.TestCase):
             os.environ, {"CHAOS_HOME": td}, clear=False
         ), patch.object(wrapper, "run_cycle_once", return_value=0) as run:
             self.assertEqual(0, wrapper.main())
-            run.assert_called_once_with(Path(td))
+            run.assert_called_once_with(Path(td).resolve())
 
 
 class RealCycleTests(unittest.TestCase):

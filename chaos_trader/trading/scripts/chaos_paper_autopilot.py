@@ -1268,18 +1268,18 @@ class PaperAutopilotRunner:
         self.enrich_versions(decision)
         if decision.get("decision") == "paper_enter" and not decision.get("_runtime_policy_checked"):
             decision = self.apply_runtime_policy(con, decision)
+        if decision.get("decision") == "paper_enter":
+            open_count = con.execute("SELECT COUNT(*) FROM paper_positions WHERE state IN ('PAPER_OPEN','PAPER_TRIMMED')").fetchone()[0]
+            max_open = int(self.config.get("budgets", "max_open_positions", default=3))
+            if open_count >= max_open:
+                decision["decision"] = "paper_wait"
+                self._add_blocker(decision, "budgets.max_open_positions reached")
         dec = decision.get("decision")
         state_map = {"paper_enter": "PAPER_OPEN", "paper_wait": "PAPER_WAIT", "paper_avoid": "AVOIDED"}
         new_state = state_map.get(str(dec), "PRE_FILTERED")
         con.execute("UPDATE candidates SET state=?, last_deep_analyze_utc=?, last_decision=?, x_checked=CASE WHEN ? THEN 1 ELSE COALESCE(x_checked,0) END, updated_at_utc=? WHERE mint=?", (new_state, now_utc(), str(dec), 1 if ((decision.get("x") or {}).get("enabled")) else 0, now_utc(), mint))
         self.log_event(con, str(dec), mint=mint, message=str(dec), payload=decision)
         if dec == "paper_enter":
-            open_count = con.execute("SELECT COUNT(*) FROM paper_positions WHERE state IN ('PAPER_OPEN','PAPER_TRIMMED')").fetchone()[0]
-            max_open = int(self.config.get("budgets", "max_open_positions", default=3))
-            if open_count >= max_open:
-                self.log_event(con, "paper_wait", mint=mint, message="max open positions reached", payload=decision)
-                con.execute("UPDATE candidates SET state='PAPER_WAIT', updated_at_utc=? WHERE mint=?", (now_utc(), mint))
-                return
             pos_id = f"paper-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
             market = decision.get("market") or {}
             plan = decision.get("paper_plan") or {}

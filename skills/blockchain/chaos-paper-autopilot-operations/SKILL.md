@@ -61,6 +61,10 @@ trading/reports/
 
 `CHAOS_HOME` is the directory `chaos onboard` created (default `~/.chaos-trader`). On a Hermes install, `HERMES_HOME` is accepted as a fallback.
 
+## Offline first-use proof
+
+From a source checkout with its wheel installed, use `python tools/paper_walkthrough.py --out ./paper-demo` (new directory), following `docs/paper-walkthrough.md`. Reuse its existing external-input fixtures; never seed decision or position rows to claim engine behavior. Inspect persisted entry/exit and fills, not just proposed decisions. Allow the ten-second market cache to expire before changing observations. Keep `paper-report` accounting distinct from `outcomes` forward-window cohorts; a short demo has no mature 24-hour sample. Keep artifacts private because they contain local paths.
+
 ## Operating Sequence
 
 ### 1. Preflight
